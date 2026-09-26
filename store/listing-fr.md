@@ -51,7 +51,7 @@ Aider à lire le coréen dans les webtoons et sur le web : l'extension lit le t
 |---|---|
 | `activeTab` | Quand l'utilisateur clique sur « Scanner une bulle » ou sur le menu contextuel, l'extension accède à l'onglet actif, et seulement à lui, pour afficher le cadre de sélection et capturer la zone visible choisie. |
 | `scripting` | Injecter le panneau Dokhae dans l'onglet actif à la demande (sous `activeTab`), au lieu de déclarer un script sur tous les sites. |
-| `storage` | Garder les réglages (jeton d'accès Dokhae, deck choisi, option Anki), l'état de l'abonnement en cache et les mots en attente d'envoi. |
+| `storage` | Garder les réglages (jeton d'accès Dokhae, identifiant aléatoire de cette installation, deck choisi, option Anki), l'état de l'abonnement en cache et les mots en attente d'envoi. |
 | `offscreen` | Faire tourner la reconnaissance de texte (Tesseract, WebAssembly) dans un Web Worker et lire l'audio de prononciation. Un service worker ne peut faire ni l'un ni l'autre. |
 | `contextMenus` | L'entrée « Analyser avec Dokhae » du clic droit sur du texte sélectionné. |
 | `https://dokhae.fr/*` | L'API Dokhae : vérification du compte, analyse du texte reconnu, enregistrement des mots dans le deck. Le script de connexion en un clic tourne uniquement sur `https://dokhae.fr/connect-extension`. |

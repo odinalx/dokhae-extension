@@ -50,7 +50,7 @@ Help people read Korean in webtoons and on the web: the extension reads the Kore
 |---|---|
 | `activeTab` | When the user clicks "Scanner une bulle" or the context menu entry, the extension gets the active tab, and only that tab, to show the selection overlay and capture the visible area they frame. |
 | `scripting` | Inject the Dokhae panel into the active tab on demand (under `activeTab`), instead of declaring a content script on every site. |
-| `storage` | Keep settings (Dokhae access token, chosen deck, Anki option), the cached subscription state, and words waiting to be sent. |
+| `storage` | Keep settings (Dokhae access token, a random id for this install, chosen deck, Anki option), the cached subscription state, and words waiting to be sent. |
 | `offscreen` | Run text recognition (Tesseract, WebAssembly) in a Web Worker and play pronunciation audio; a service worker can do neither. |
 | `contextMenus` | The "Analyser avec Dokhae" right-click entry on selected text. |
 | `https://dokhae.fr/*` | The Dokhae API: account check, analysis of the recognised text, saving words to the deck. The one-click connect script runs only on `https://dokhae.fr/connect-extension`. |

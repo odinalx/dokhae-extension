@@ -44,7 +44,7 @@ export default defineConfig({
   manifest: {
     name: 'Dokhae',
     description: "Lis tes webtoons en coréen\u00a0: capture une bulle, comprends chaque mot, garde-les dans ton deck Dokhae.",
-    version: '1.2.1',
+    version: '1.3.0',
     homepage_url: siteOrigin(),
     // chrome.runtime.getContexts (the offscreen document check) is Chrome 116+.
     minimum_chrome_version: '116',

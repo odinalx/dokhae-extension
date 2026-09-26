@@ -23,8 +23,21 @@ match exactly.
 ### 1. Extension to page, on load: `DOKHAE_PRESENT`
 
 ```js
-{ source: "dokhae-extension", type: "DOKHAE_PRESENT", version: "1.0.0" }
+{
+  source: "dokhae-extension",
+  type: "DOKHAE_PRESENT",
+  version: "1.3.0",
+  installId: "3f2c9a8e-…",       // random, kept for the life of the install
+  deviceName: "Chrome · Windows", // shown in the account's device list
+  rotates: true,                  // stores the token /api/me rotates
+}
 ```
+
+`installId`, `deviceName` and `rotates` exist since 1.3. The page passes them
+to the site when it connects the device: the same `installId` takes its own
+place back instead of a new one, and only a client that says `rotates` gets
+its token rotated. A 1.2 extension sends none of them; the page then keeps an
+id of its own in `localStorage` for that browser.
 
 Posted once, as soon as the content script runs. If the page has not seen it
 (say 1.5 s after load), assume the extension is not installed (or is an old
@@ -48,8 +61,9 @@ window.postMessage(
 - The extension only accepts it when `event.source === window` and
   `event.origin` is the site origin, so posting from an iframe does not work.
 - Send it after a user action (a "Connecter" button click), and only for a
-  signed-in account. Minting a fresh token per connect is fine; the site's
-  token list then shows it as a device.
+  signed-in, subscribed account. The site connects the device first (two
+  browsers per account; when both places are taken the page offers to
+  replace one) and only then posts the token.
 
 ### 3. Extension to page: `DOKHAE_CONNECTED`
 
@@ -92,12 +106,24 @@ addEventListener("message", (e) => {
 })
 
 async function connect() {
-  const { token } = await fetch("/api/tokens", { method: "POST" }).then((r) => r.json())
+  // registerExtensionFn on the site: connects the device, returns its token
+  const { token } = await registerDevice({ installId, name: deviceName, rotates })
   postMessage({ source: "dokhae-site", type: "DOKHAE_CONNECT", token }, ORIGIN)
 }
 ```
 
-(`/api/tokens` stands for whatever endpoint mints a token for the session.)
+## After connecting: rotation and revocation
+
+- `GET /api/me` may answer with a `token` field: the device's new token. The
+  extension stores it at once (`rotateSiteToken`). The old one keeps working
+  ten minutes for requests already in flight.
+- Using the old token after that, while the new one is in use, is what a
+  copied token looks like: the site disconnects the device and answers
+  `401 { error: "device_revoked", reason: "reuse" }`. Other reasons are
+  `replaced`, `user`, `all`, `inactive`, `password`, `signout`; the popup and
+  settings word each one.
+- **Déconnecter** in the settings calls `POST /api/device/logout` before
+  forgetting the token.
 
 ## Security notes
 
