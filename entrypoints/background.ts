@@ -5,7 +5,7 @@ import type {
   FlashcardTarget,
   SelectionRect,
 } from '../src/types';
-import { getSettings, hasVoiceCreds, saveSettings } from '../src/settings';
+import { getSettings, hasVoiceCreds, setSiteToken } from '../src/settings';
 import { clovaTts } from '../src/clova';
 import { naverWordAudioUrl } from '../src/naver';
 import { sendCardsToAnki } from '../src/anki';
@@ -21,7 +21,7 @@ import { createQueue, withCard, withoutIds } from '../src/queue';
 import { clearAccessCache, deckLock, getAccess, lockError, lockReason } from '../src/access';
 import { SITE_URL } from '../src/config';
 import { prepareForOcr } from '../src/ocrPrep';
-import { isConnectPage, TOKEN_RE } from '../src/connect';
+import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
 import type { Settings } from '../src/types';
 
 const OFFSCREEN_URL = 'offscreen.html';
@@ -70,7 +70,13 @@ export default defineBackground(() => {
   // script on every page. Clicking it grants activeTab, which lets us inject
   // the content script and hand it the text; the panel then runs the same
   // pipeline as a scan, minus capture and OCR.
-  chrome.runtime.onInstalled.addListener(() => {
+  chrome.runtime.onInstalled.addListener((details) => {
+    // A fresh install goes straight to connecting the account, with the
+    // how-to right after: installing and then finding nothing to do was the
+    // first thing people hit.
+    if (details.reason === 'install') {
+      void chrome.tabs.create({ url: `${SITE_URL}${CONNECT_PATH}?welcome=1` });
+    }
     // removeAll first: an update would otherwise keep the old hidden entry.
     chrome.contextMenus.removeAll(() => {
       chrome.contextMenus.create({
@@ -148,8 +154,7 @@ export default defineBackground(() => {
     (async () => {
       try {
         const account = await fetchAccount(message.token);
-        const settings = await getSettings();
-        await saveSettings({ ...settings, siteToken: message.token });
+        await setSiteToken(message.token);
         await clearAccessCache();
         // Warm the cache with the verdict we already have.
         await getAccess(true);
@@ -179,6 +184,7 @@ export default defineBackground(() => {
           email: state.email,
           plan: state.plan,
           subscribed: state.subscribed,
+          revokedReason: state.revokedReason,
           siteUrl: SITE_URL,
         } satisfies ExtensionMessage);
       })();

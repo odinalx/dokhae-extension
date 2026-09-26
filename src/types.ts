@@ -15,7 +15,7 @@ export type FlashcardTarget = 'site' | 'anki';
 // Dokhae account + Naver Cloud credentials (Clova Voice) + Anki.
 export interface Settings {
   // Dokhae website (subscription + built-in flashcards).
-  siteToken: string;      // personal API token ("sori_…") created on /account
+  siteToken: string;      // this device's token ("sori_…"); stored apart, see settings.ts
   flashcardTarget: FlashcardTarget;
   // Which Dokhae deck captured words land in. '' means "the account's first
   // deck" — the server's own fallback, so a fresh install needs no setup and a
@@ -205,6 +205,7 @@ export interface AccessInfo {
   email?: string;
   plan?: string;
   subscribed?: boolean;
+  revokedReason?: string; // with 'invalid-token': why the site disconnected this browser
   siteUrl: string; // site origin, for "open the website" links
 }
 

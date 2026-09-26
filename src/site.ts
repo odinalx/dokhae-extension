@@ -1,9 +1,12 @@
 import { SITE_URL } from './config';
+import { TOKEN_RE } from './connect';
 import { romanize } from './romanize';
+import { liveToken, rotateSiteToken } from './settings';
 import type { AnalysisResult, AnkiCardDraft } from './types';
 
 // Client for the Dokhae website's extension API (see the site's src/routes/api).
-// Auth is a personal bearer token ("sori_…") the user creates on /account.
+// Auth is this device's bearer token ("sori_…"), handed over by the site's
+// /connect-extension page and rotated daily through GET /api/me.
 
 export interface SiteAccount {
   email: string;
@@ -18,9 +21,27 @@ export class SiteApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code: string
+    readonly code: string,
+    /** For `device_revoked`: why ("reuse", "replaced", "user", …). */
+    readonly detail?: string
   ) {
     super(message);
+  }
+}
+
+/** Why the site disconnected this browser, in words the reader can act on. */
+export function revokedMessage(reason: string | undefined): string {
+  switch (reason) {
+    case 'reuse':
+      return `La connexion de ce navigateur a été utilisée depuis un autre appareil, on l'a coupée par sécurité. Reconnecte ton compte.`;
+    case 'replaced':
+      return `Ce navigateur a été remplacé par un autre sur ton compte. Reconnecte-le pour reprendre sa place.`;
+    case 'inactive':
+      return `Ce navigateur n'a pas servi depuis longtemps et a été déconnecté. Reconnecte ton compte.`;
+    case 'password':
+      return `Ton mot de passe a changé : reconnecte ton compte.`;
+    default:
+      return `Ce navigateur a été déconnecté de ton compte. Reconnecte-le en un clic.`;
   }
 }
 
@@ -31,6 +52,7 @@ const FRENCH_ERRORS: Record<string, string> = {
 };
 
 async function request(token: string, path: string, init?: RequestInit): Promise<unknown> {
+  token = await liveToken(token);
   let res: Response;
   try {
     res = await fetch(`${SITE_URL}${path}`, {
@@ -47,6 +69,10 @@ async function request(token: string, path: string, init?: RequestInit): Promise
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const code = typeof body.error === 'string' ? body.error : `http_${res.status}`;
+    if (code === 'device_revoked') {
+      const reason = typeof body.reason === 'string' ? body.reason : undefined;
+      throw new SiteApiError(revokedMessage(reason), res.status, code, reason);
+    }
     // The API speaks English (it also serves the app); the codes the reader
     // can act on get French wording here.
     const french = FRENCH_ERRORS[res.status === 401 ? 'http_401' : code];
@@ -60,9 +86,17 @@ async function request(token: string, path: string, init?: RequestInit): Promise
   return body;
 }
 
-/** GET /api/me — validates the token and reports the subscription state. */
+/**
+ * GET /api/me: validates the token and reports the subscription state. When
+ * the token is due for rotation the answer carries its replacement, stored
+ * right away: the old one only works a few more minutes.
+ */
 export async function fetchAccount(token: string): Promise<SiteAccount> {
-  const body = (await request(token, '/api/me')) as Partial<SiteAccount>;
+  const live = await liveToken(token);
+  const body = (await request(live, '/api/me')) as Partial<SiteAccount> & { token?: unknown };
+  if (typeof body.token === 'string' && TOKEN_RE.test(body.token)) {
+    await rotateSiteToken(live, body.token);
+  }
   return {
     email: String(body.email ?? ''),
     name: String(body.name ?? ''),
@@ -215,4 +249,9 @@ function dedupe(items: string[]): string[] {
     out.push(v);
   }
   return out;
+}
+
+/** POST /api/device/logout: sign-out ends the token on the site too, freeing this browser's place. */
+export async function logoutDevice(token: string): Promise<void> {
+  await request(token, '/api/device/logout', { method: 'POST', body: '{}' });
 }

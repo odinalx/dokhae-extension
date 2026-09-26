@@ -1,6 +1,6 @@
 import { SITE_URL } from './config';
 import { getSettings } from './settings';
-import { fetchAccount, SiteApiError } from './site';
+import { fetchAccount, revokedMessage, SiteApiError } from './site';
 
 // Access: scanning needs a valid Dokhae token on an account with a plan. There
 // is no free tier (the way in is a cheap first month), so a valid token on an
@@ -17,6 +17,8 @@ export interface AccessState {
   plan?: string;
   /** True on a paid plan. Without one the extension stays locked. */
   subscribed?: boolean;
+  /** With `invalid-token`: the site disconnected this browser, and why. */
+  revokedReason?: string;
   checkedAt: number; // when the site last gave a definitive answer
 }
 
@@ -69,7 +71,12 @@ export async function getAccess(force = false): Promise<AccessState> {
     return state;
   } catch (e) {
     if (e instanceof SiteApiError && e.status === 401) {
-      const state: AccessState = { ok: false, reason: 'invalid-token', checkedAt: Date.now() };
+      const state: AccessState = {
+        ok: false,
+        reason: 'invalid-token',
+        checkedAt: Date.now(),
+        ...(e.code === 'device_revoked' ? { revokedReason: e.detail ?? 'user' } : {}),
+      };
       await writeCache(state);
       return state;
     }
@@ -86,7 +93,9 @@ export function lockMessage(state: AccessState): string {
     case 'no-token':
       return `Connecte ton compte Dokhae pour scanner et garder tes mots.`;
     case 'invalid-token':
-      return `Ton accès à Dokhae a expiré ou a été révoqué. Reconnecte ton compte.`;
+      return state.revokedReason
+        ? revokedMessage(state.revokedReason)
+        : `Ton accès à Dokhae a expiré ou a été révoqué. Reconnecte ton compte.`;
     case 'not-subscribed':
       return `Scanner fait partie de l'abonnement Dokhae. Pour un nouveau compte, le premier mois est à 2,99\u00a0€.`;
     case 'offline':

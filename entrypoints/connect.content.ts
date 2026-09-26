@@ -1,6 +1,7 @@
 import type { ExtensionMessage } from '../src/types';
 import { connectToken, type ConnectReply, type PresentNotice } from '../src/connect';
 import { SITE_URL } from '../src/config';
+import { deviceName, getInstallId } from '../src/device';
 
 // Runs only on the site's /connect-extension page. That origin is already a
 // host permission (the API lives there), so this adds no install warning. The
@@ -9,7 +10,7 @@ import { SITE_URL } from '../src/config';
 export default defineContentScript({
   matches: [`${__DOKHAE_SITE_ORIGIN__}/connect-extension*`],
   runAt: 'document_end',
-  main() {
+  async main() {
     const origin = new URL(SITE_URL).origin;
     // Belt and braces: the match pattern already pins the page.
     if (location.origin !== origin) return;
@@ -20,6 +21,9 @@ export default defineContentScript({
       source: 'dokhae-extension',
       type: 'DOKHAE_PRESENT',
       version: browser.runtime.getManifest().version,
+      installId: await getInstallId(),
+      deviceName: deviceName(),
+      rotates: true,
     });
 
     window.addEventListener('message', async (event: MessageEvent) => {
