@@ -187,14 +187,3 @@ a.btn-quiet, a.btn-quiet:hover { color: var(--wkr-text); }
 }
 .notice.warn-hint { background: #fbeeeb; }
 
-/* The paste-a-token fallback stays one click away, folded. */
-details.paste {
-  display: flex; flex-direction: column; gap: 12px;
-  border-top: 1px solid var(--wkr-border); padding-top: 12px;
-}
-details.paste[open] > * + * { margin-top: 12px; }
-details.paste summary {
-  cursor: pointer; font-size: 14px; font-weight: 600; color: var(--wkr-muted);
-  border-radius: 6px; width: fit-content;
-}
-details.paste summary:hover { color: var(--wkr-text); }

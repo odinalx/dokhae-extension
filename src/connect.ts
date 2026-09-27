@@ -2,7 +2,7 @@
 // /connect-extension page and the extension. Documented for the site side in
 // docs/connect-extension.md; keep the two in sync.
 
-/** Shape of a Dokhae API token, as minted on the site's /account page. */
+/** Shape of a Dokhae device token, as handed over by the connect page. */
 export const TOKEN_RE = /^sori_[A-Za-z0-9_-]{20,}$/;
 
 /** Path of the site page allowed to hand the extension a token. */
@@ -15,11 +15,19 @@ export interface ConnectRequest {
   token: string;
 }
 
-/** extension -> page, once on load: the extension is installed. */
+/**
+ * extension -> page, once on load: the extension is installed. Since 1.3 it
+ * also says which install this is (so reconnecting takes the same device
+ * place back), how to name it in the account's device list, and that it
+ * stores the token /api/me rotates.
+ */
 export interface PresentNotice {
   source: 'dokhae-extension';
   type: 'DOKHAE_PRESENT';
   version: string;
+  installId: string;
+  deviceName: string;
+  rotates: true;
 }
 
 /** Machine-readable reasons a connect failed, for the page to word itself. */

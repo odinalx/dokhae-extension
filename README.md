@@ -34,15 +34,22 @@ The interface is in French. It is the browser client of the
 ## Connect your account
 
 1. Create an account on https://dokhae.fr and subscribe.
-2. Click **Connecter mon compte** in the extension's popup (or on its settings
-   page). It opens `/connect-extension` on the site, which hands a fresh API
-   token to the extension in one click. The whole exchange is specified in
-   [docs/connect-extension.md](docs/connect-extension.md): a content script
-   runs on that one page only, announces itself with `DOKHAE_PRESENT`, receives
-   the token in `DOKHAE_CONNECT` and answers `DOKHAE_CONNECTED`.
-3. Fallback, if the button does not work: create a token (`sori_…`) under
-   "Accès de l'extension" on `/account` and paste it in the settings page,
-   under **Coller un jeton**.
+2. Installing the extension opens `/connect-extension?welcome=1`; later, the
+   **Connecter mon compte** button in the popup or the settings page opens
+   `/connect-extension`. One click there connects this browser as a device of
+   the account and hands its token to the extension. The whole exchange is
+   specified in [docs/connect-extension.md](docs/connect-extension.md): a
+   content script runs on that one page only, announces itself (with this
+   install's id) in `DOKHAE_PRESENT`, receives the token in `DOKHAE_CONNECT`
+   and answers `DOKHAE_CONNECTED`.
+
+There is no way to paste a token by hand any more. An account holds two
+browsers and one phone; the token rotates once a day through `GET /api/me`
+(`src/site.ts`, `fetchAccount`) and lives under its own storage key so no
+settings save can write an old one back (`src/settings.ts`). Using a replaced
+token after its grace period disconnects the device: that is what a copied
+token looks like. **Déconnecter** in the settings revokes the token on the
+site too.
 
 The verdict of `GET /api/me` is cached for 10 minutes, and a previously
 unlocked extension stays usable for 24 hours without a connection so a flaky

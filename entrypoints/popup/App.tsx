@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ExtensionMessage } from '../../src/types';
 import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
+import { revokedMessage } from '../../src/site';
 import { koreanSelection } from '../../src/hangul';
 
 type Status = 'idle' | 'activating' | 'analyzing' | 'error';
@@ -12,6 +13,7 @@ interface AccessView {
   email?: string;
   plan?: string;
   subscribed?: boolean;
+  revokedReason?: string;
 }
 
 const PLAN_NAMES: Record<string, string> = {
@@ -84,7 +86,7 @@ export function App() {
       if (resp && resp.type === 'ACCESS_INFO') {
         setAccess({
           ok: resp.ok, reason: resp.reason, email: resp.email,
-          plan: resp.plan, subscribed: resp.subscribed,
+          plan: resp.plan, subscribed: resp.subscribed, revokedReason: resp.revokedReason,
         });
       }
     } catch {
@@ -186,7 +188,9 @@ export function App() {
           <p className="card-text">
             {reason === 'no-token'
               ? 'Un clic suffit : Dokhae s’ouvre dans un onglet et relie l’extension à ton compte.'
-              : 'Ton accès a expiré ou a été révoqué. Reconnecte l’extension en un clic.'}
+              : access?.revokedReason
+                ? revokedMessage(access.revokedReason)
+                : 'Ton accès a expiré ou a été révoqué. Reconnecte l’extension en un clic.'}
           </p>
           <button className="btn btn-primary" onClick={() => open(CONNECT_PATH)}>
             Connecter mon compte
@@ -194,7 +198,9 @@ export function App() {
           {reason === 'no-token' && (
             <p className="card-foot">
               Pas encore de compte&nbsp;?{' '}
-              <button className="btn-link" onClick={() => open('/login')}>Crée-le ici</button>
+              <button className="btn-link" onClick={() => open('/login?mode=signup&next=/connect-extension')}>Crée-le ici</button>
+              {' · '}
+              <button className="btn-link" onClick={() => open('/extension')}>Comment ça marche&nbsp;?</button>
             </p>
           )}
         </section>

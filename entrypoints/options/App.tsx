@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SETTINGS, type ExtensionMessage, type Settings } from '../../src/types';
-import { getSettings, saveSettings, hasVoiceCreds } from '../../src/settings';
-import { fetchDecks, type SiteDeck } from '../../src/site';
+import { getSettings, saveSettings, hasVoiceCreds, setSiteToken, TOKEN_KEY } from '../../src/settings';
+import { fetchDecks, logoutDevice, revokedMessage, type SiteDeck } from '../../src/site';
 import { clearAccessCache } from '../../src/access';
 import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
@@ -11,6 +11,7 @@ interface AccessView {
   reason?: string;
   email?: string;
   plan?: string;
+  revokedReason?: string;
 }
 
 const PLAN_NAMES: Record<string, string> = {
@@ -26,10 +27,9 @@ export function App() {
   const [saved, setSaved] = useState(false);
   const [access, setAccess] = useState<AccessView | null>(null);
   const [checking, setChecking] = useState(true);
-  // The token as stored, not as typed: the deck list is fetched with it, and
-  // refetching on every keystroke of a half-pasted token is pointless traffic.
+  // The token as stored: the deck list is fetched with it. Only the connect
+  // page and the rotation in fetchAccount write it, never this page's save.
   const [savedToken, setSavedToken] = useState('');
-  const [pasteOpen, setPasteOpen] = useState(false);
   const savedTokenRef = useRef('');
   savedTokenRef.current = savedToken;
 
@@ -40,7 +40,10 @@ export function App() {
         type: 'ACCESS_CHECK', force,
       } satisfies ExtensionMessage)) as ExtensionMessage | undefined;
       if (resp && resp.type === 'ACCESS_INFO') {
-        setAccess({ ok: resp.ok, reason: resp.reason, email: resp.email, plan: resp.plan });
+        setAccess({
+          ok: resp.ok, reason: resp.reason, email: resp.email, plan: resp.plan,
+          revokedReason: resp.revokedReason,
+        });
       }
     } catch {
       setAccess(null);
@@ -58,8 +61,8 @@ export function App() {
     // Connecting happens in a site tab: pick the new token up without a
     // reload, and without touching the other fields someone may be editing.
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area !== 'local' || !changes.settings) return;
-      const token = String((changes.settings.newValue as Partial<Settings> | undefined)?.siteToken ?? '');
+      if (area !== 'local' || !changes[TOKEN_KEY]) return;
+      const token = String(changes[TOKEN_KEY].newValue ?? '');
       if (token === savedTokenRef.current) return;
       savedTokenRef.current = token;
       setSavedToken(token);
@@ -76,20 +79,16 @@ export function App() {
   };
 
   const onSave = async () => {
-    const clean = { ...settings, siteToken: settings.siteToken.trim() };
-    await saveSettings(clean);
-    setSettings(clean);
+    await saveSettings(settings);
     setSaved(true);
-    setSavedToken(clean.siteToken);
-    savedTokenRef.current = clean.siteToken;
-    // Re-verify with the (possibly new) token so the status badge is honest.
-    void refreshAccess(true);
   };
 
   const onDisconnect = async () => {
-    // From storage, not state: unsaved edits elsewhere on the page stay unsaved.
-    const stored = await getSettings();
-    await saveSettings({ ...stored, siteToken: '' });
+    // Ends the token on the site too, which frees this browser's place on the
+    // account. Offline, it is still forgotten here.
+    const token = savedTokenRef.current;
+    if (token) await logoutDevice(token).catch(() => {});
+    await setSiteToken('');
     await clearAccessCache();
     setSettings((s) => ({ ...s, siteToken: '' }));
     setSavedToken('');
@@ -167,7 +166,9 @@ export function App() {
               <>
                 {access?.reason === 'invalid-token' && (
                   <p className="hint warn-hint" role="alert">
-                    Ton accès a expiré ou a été révoqué. Reconnecte l’extension.
+                    {access.revokedReason
+                      ? revokedMessage(access.revokedReason)
+                      : 'Ton accès a expiré ou a été révoqué. Reconnecte l’extension.'}
                   </p>
                 )}
                 <p className="hint">
@@ -183,34 +184,12 @@ export function App() {
                   >
                     Connecter mon compte
                   </a>
+                  <a className="btn btn-quiet" href={`${SITE_URL}/extension`} target="_blank" rel="noreferrer">
+                    Comment ça marche{NB}?
+                  </a>
                 </div>
               </>
             )}
-
-            <details className="paste" open={pasteOpen} onToggle={(e) => setPasteOpen((e.target as HTMLDetailsElement).open)}>
-              <summary>Coller un jeton</summary>
-              <p className="hint">
-                Si le bouton ne marche pas, crée un <em>jeton d’accès</em> sur{' '}
-                <a href={`${SITE_URL}/account`} target="_blank" rel="noreferrer">ta page compte</a>{' '}
-                et colle-le ici.
-              </p>
-              <label>
-                <span className="field-label">Jeton d’accès</span>
-                <input
-                  type="password"
-                  placeholder="sori_…"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={settings.siteToken}
-                  onChange={(e) => update({ siteToken: e.target.value })}
-                />
-              </label>
-              <div className="actions">
-                <button className="btn btn-primary" onClick={onSave} disabled={checking || !settings.siteToken.trim()}>
-                  {checking ? 'Vérification…' : 'Enregistrer et vérifier'}
-                </button>
-              </div>
-            </details>
           </>
         )}
       </section>
