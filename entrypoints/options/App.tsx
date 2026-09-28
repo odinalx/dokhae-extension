@@ -443,7 +443,8 @@ function DeckPicker({
 
 const NB = '\u00a0';
 
-const extensionOrigin = `chrome-extension://${chrome.runtime.id}`;
+// chrome-extension://<id> on Chrome, moz-extension://<uuid> on Firefox.
+const extensionOrigin = new URL(chrome.runtime.getURL('/')).origin;
 
 // Naver Clova Voice settings are set aside for now: the code stays but the UI
 // is hidden. Flip to true to bring the section back.

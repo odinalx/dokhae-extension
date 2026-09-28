@@ -34,6 +34,26 @@ function siteOrigin(): string {
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  // WXT builds Firefox as MV2 unless told otherwise; both stores get MV3.
+  manifestVersion: 3,
+  // `wxt zip -b firefox` also packs the source for Mozilla's review (their
+  // rule for bundled code). Leave out what npm install or a build recreates,
+  // the store kit, and anything local; SOURCES.md says how to rebuild.
+  zip: {
+    excludeSources: [
+      '.output/**',
+      '.wxt/**',
+      'public/tesseract/**',
+      'store/**',
+      'docs/**',
+      '.env',
+      '.env.*',
+      '*.zip',
+    ],
+    // WXT leaves out entrypoints the Firefox build skips; the source zip still
+    // holds the whole extension.
+    includeSources: ['entrypoints/offscreen/**'],
+  },
   vite: () => ({
     define: {
       // See src/globals.d.ts.
@@ -41,13 +61,34 @@ export default defineConfig({
       __DOKHAE_SITE_ORIGIN__: JSON.stringify(siteOrigin()),
     },
   }),
-  manifest: {
+  // One manifest for both stores: `wxt build` makes Chrome's, `wxt build -b
+  // firefox` Firefox's. Only what differs depends on `browser`.
+  manifest: ({ browser }) => ({
     name: 'Dokhae',
     description: "Lis tes webtoons en coréen\u00a0: capture une bulle, comprends chaque mot, garde-les dans ton deck Dokhae.",
     version: '1.3.0',
     homepage_url: siteOrigin(),
-    // chrome.runtime.getContexts (the offscreen document check) is Chrome 116+.
-    minimum_chrome_version: '116',
+    ...(browser === 'firefox'
+      ? {
+          browser_specific_settings: {
+            gecko: {
+              // Fixed id: AMO ties the listing, updates and the storage of an
+              // installed copy to it.
+              id: 'extension@dokhae.fr',
+              // First version that reads data_collection_permissions.
+              strict_min_version: '140.0',
+              // Declared to Mozilla and shown at install: the text of a scanned
+              // bubble or a selection goes to the Dokhae server for analysis,
+              // and the extension holds the account's sign-in token.
+              data_collection_permissions: { required: ['websiteContent', 'authenticationInfo'] },
+            },
+            gecko_android: { strict_min_version: '142.0' },
+          },
+        }
+      : {
+          // chrome.runtime.getContexts (the offscreen document check) is Chrome 116+.
+          minimum_chrome_version: '116',
+        }),
     // Tesseract compiles a .wasm core; MV3's default CSP (script-src 'self')
     // blocks WebAssembly.instantiate. 'wasm-unsafe-eval' re-allows it.
     // (The sandbox entry that used to sit here existed only for Kiwi, whose
@@ -58,7 +99,15 @@ export default defineConfig({
     },
     // No 'tabs': nothing reads a tab's URL or title, and it adds a
     // "browsing history" warning at install.
-    permissions: ['activeTab', 'scripting', 'storage', 'offscreen', 'contextMenus'],
+    // 'offscreen' is Chrome's way to run OCR and audio outside its service
+    // worker; Firefox's background page does both itself (src/engine).
+    permissions: [
+      'activeTab',
+      'scripting',
+      'storage',
+      ...(browser === 'firefox' ? [] : ['offscreen']),
+      'contextMenus',
+    ],
     host_permissions: [
       // Pronunciation: Google TTS is the fallback voice (translation itself
       // moved to the Dokhae server)...
@@ -83,5 +132,5 @@ export default defineConfig({
     // No web_accessible_resources: the Tesseract worker, core and model are
     // loaded by the offscreen document, which is already on the extension
     // origin. Exposing them to every page only let sites fingerprint Dokhae.
-  },
+  }),
 });

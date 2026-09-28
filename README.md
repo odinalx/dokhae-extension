@@ -2,8 +2,8 @@
 
 > **Dokhae : apprends le coréen en lisant tes webtoons préférés, ou même tes romans.**
 
-A Chrome/Chromium extension (Manifest V3, version 1.0.0) for reading Korean
-webtoons. Drag a box over a speech bubble and it:
+A browser extension for Chrome/Chromium and Firefox (Manifest V3) for reading
+Korean webtoons, built for both from the same source. Drag a box over a speech bubble and it:
 
 - **reads** the Korean with Tesseract, locally, on your machine,
 - **analyses** it on the Dokhae server: sentence translation, the sentence split
@@ -120,16 +120,33 @@ npm run typecheck
 
 `WXT_SITE_URL` (from the environment or `.env`, default
 `http://localhost:3000`) becomes both the API origin and a host permission, so
-build against the site you want to talk to. To try a build, open
-`chrome://extensions`, turn on Developer mode, **Load unpacked** and pick
-`.output/chrome-mv3`. After a rebuild, click the reload icon on the extension's
-card.
+build against the site you want to talk to. `npm run build` builds both
+browsers (`build:chrome` and `build:firefox` build one).
+
+- **Chrome:** open `chrome://extensions`, turn on Developer mode, **Load
+  unpacked** and pick `.output/chrome-mv3`. After a rebuild, click the reload
+  icon on the extension's card.
+- **Firefox:** open `about:debugging#/runtime/this-firefox`, **Load Temporary
+  Add-on** and pick `.output/firefox-mv3/manifest.json`. `npm run dev:firefox`
+  does the same with live reload.
+
+### One source, two browsers
+
+Everything is shared except how OCR and audio run, which the browsers do
+differently: Chrome's background is a service worker, so it hands both to an
+offscreen document; Firefox's background page runs them itself. That choice
+lives in `src/engine/` (picked at build time from `import.meta.env.FIREFOX`),
+and `wxt.config.ts` builds each manifest from one definition. Write a feature
+once; only touch `src/engine/` for something the two browsers genuinely do
+differently, and build both before merging.
 
 Release package:
 
 ```sh
 WXT_SITE_URL=https://dokhae.fr npm run zip
-# → .output/dokhae-extension-1.0.0-chrome.zip
+# → .output/dokhae-extension-<version>-chrome.zip   (Chrome Web Store)
+# → .output/dokhae-extension-<version>-firefox.zip  (addons.mozilla.org)
+# → .output/dokhae-extension-<version>-sources.zip  (source for Mozilla's review)
 ```
 
 `npm run zip` sets `SORI_RELEASE`, which makes the build refuse a localhost
@@ -137,12 +154,12 @@ origin. Never set `SORI_SCREENSHOTS` for a release: it is only for the site's
 screenshot script and adds `<all_urls>`. For an update, bump `version` in both
 `wxt.config.ts` and `package.json`.
 
-## Publishing on the Chrome Web Store
+## Publishing
 
-Everything for the listing is in [`store/`](store/README.md): French and
+Everything for the listings is in [`store/`](store/README.md): French and
 English descriptions, permission justifications, privacy answers,
-screenshots and promo tile, plus the checks to run on the built
-`manifest.json` before uploading.
+screenshots and promo tile, the checks to run on each built `manifest.json`,
+and the steps for the Chrome Web Store and for addons.mozilla.org.
 
 ## Anki (optional)
 
@@ -151,8 +168,9 @@ the [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on and
 wait in a queue until **Tout envoyer** (or immediately, if you turn that on).
 
 1. In desktop Anki, install AnkiConnect (code `2055492159`) and restart.
-2. The extension's settings page shows its `chrome-extension://<id>` origin.
-   Add it to `webCorsOriginList` in AnkiConnect's config:
+2. The extension's settings page shows its origin (`chrome-extension://…` on
+   Chrome, `moz-extension://…` on Firefox). Add it to `webCorsOriginList` in
+   AnkiConnect's config:
    ```json
    "webCorsOriginList": ["http://localhost", "chrome-extension://<your-id>"]
    ```

@@ -5,10 +5,14 @@
   "scripts": {
     "postinstall": "node scripts/copy-assets.mjs && wxt prepare",
     "dev": "wxt",
-    "build": "wxt build",
-    "zip": "SORI_RELEASE=1 wxt zip",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build && wxt build -b firefox",
+    "zip": "SORI_RELEASE=1 wxt zip && SORI_RELEASE=1 wxt zip -b firefox",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:chrome": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "lint:firefox": "npx -y web-ext@8 lint -s .output/firefox-mv3"
   },
   "dependencies": {
     "react": "^18.3.1",

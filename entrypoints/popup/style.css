@@ -178,3 +178,7 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+/* The grant page (entrypoints/grant) reuses these styles in a full tab. */
+body.page { width: auto; min-height: 100vh; display: grid; place-items: center; }
+.grant { max-width: 420px; }
