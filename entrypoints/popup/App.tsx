@@ -4,6 +4,7 @@ import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
 import { revokedMessage } from '../../src/site';
 import { koreanSelection } from '../../src/hangul';
+import { hasSiteAccess, requestSiteAccess } from '../../src/permissions';
 
 type Status = 'idle' | 'activating' | 'analyzing' | 'error';
 
@@ -46,7 +47,7 @@ function TextIcon() {
 /**
  * The Korean selected in the active tab, if any. Opening the popup grants
  * activeTab, which is all executeScript needs for the tab's own frame; pages
- * Chrome protects (chrome://, the Web Store, PDFs) just give no selection.
+ * the browser protects (its own pages, its add-on store, PDFs) just give no selection.
  */
 async function readSelection(): Promise<{ tabId: number; text: string } | null> {
   try {
@@ -98,6 +99,20 @@ export function App() {
   useEffect(() => {
     void check();
   }, [check]);
+
+  // Firefox lets readers withhold site access; without it every check fails.
+  const [siteAccess, setSiteAccess] = useState<boolean | null>(null);
+  useEffect(() => {
+    void hasSiteAccess().then(setSiteAccess);
+  }, []);
+  const allowSite = () => {
+    requestSiteAccess()
+      .then((ok) => {
+        setSiteAccess(ok);
+        if (ok) void check();
+      })
+      .catch(() => {});
+  };
 
   const [selection, setSelection] = useState<{ tabId: number; text: string } | null>(null);
   useEffect(() => {
@@ -180,7 +195,18 @@ export function App() {
         ) : null}
       </header>
 
-      {reason === 'no-token' || reason === 'invalid-token' ? (
+      {siteAccess === false ? (
+        <section className="card" aria-labelledby="state-title">
+          <h1 id="state-title" className="card-title">Autorise Dokhae</h1>
+          <p className="card-text">
+            Ton navigateur n’a pas encore autorisé Dokhae à contacter dokhae.fr et les
+            dictionnaires. Sans ça, impossible de lire une bulle.
+          </p>
+          <button className="btn btn-primary" onClick={allowSite}>
+            Autoriser
+          </button>
+        </section>
+      ) : reason === 'no-token' || reason === 'invalid-token' ? (
         <section className="card" aria-labelledby="state-title">
           <h1 id="state-title" className="card-title">
             {reason === 'no-token' ? 'Connecte ton compte' : 'Reconnecte ton compte'}

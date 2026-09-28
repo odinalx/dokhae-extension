@@ -25,6 +25,7 @@ import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
 import type { Settings } from '../src/types';
 import { describe } from '../src/describe';
 import { getEngine } from '../src/engine';
+import { hasSiteAccess } from '../src/permissions';
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 // Starting the engine (up to 15 s the first time) plus reading with the best
@@ -77,7 +78,13 @@ export default defineBackground(() => {
     // how-to right after: installing and then finding nothing to do was the
     // first thing people hit.
     if (details.reason === 'install') {
-      void chrome.tabs.create({ url: `${SITE_URL}${CONNECT_PATH}?welcome=1` });
+      // Firefox may not have granted site access yet; nothing works without
+      // it (not even the connect page), so that comes first.
+      void hasSiteAccess().then((ok) =>
+        chrome.tabs.create({
+          url: ok ? `${SITE_URL}${CONNECT_PATH}?welcome=1` : chrome.runtime.getURL('/grant.html'),
+        }),
+      );
     }
     // removeAll first: an update would otherwise keep the old hidden entry.
     chrome.contextMenus.removeAll(() => {
@@ -115,8 +122,8 @@ export default defineBackground(() => {
           type: 'START_SCAN_DONE',
           ok: false,
           message:
-            'Dokhae ne peut pas lire cette page. Chrome bloque les extensions sur ' +
-            'les pages chrome://, le Web Store et les PDF.',
+            'Dokhae ne peut pas lire cette page. Le navigateur bloque les extensions sur ' +
+            'ses pages internes, sa boutique d’extensions et les PDF.',
         } satisfies ExtensionMessage);
       });
     return true;
@@ -219,8 +226,8 @@ export default defineBackground(() => {
             );
           } catch (e) {
             throw new Error(
-              `Impossible de capturer la page. Chrome bloque la capture sur certaines ` +
-                `pages (chrome://, le Web Store, les PDF). Détail\u00a0: ${describe(e)}`
+              `Impossible de capturer la page. Le navigateur bloque la capture sur certaines ` +
+                `pages (ses pages internes, sa boutique d’extensions, les PDF). Détail\u00a0: ${describe(e)}`
             );
           }
 
