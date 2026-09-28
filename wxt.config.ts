@@ -36,6 +36,24 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   // WXT builds Firefox as MV2 unless told otherwise; both stores get MV3.
   manifestVersion: 3,
+  // `wxt zip -b firefox` also packs the source for Mozilla's review (their
+  // rule for bundled code). Leave out what npm install or a build recreates,
+  // the store kit, and anything local; SOURCES.md says how to rebuild.
+  zip: {
+    excludeSources: [
+      '.output/**',
+      '.wxt/**',
+      'public/tesseract/**',
+      'store/**',
+      'docs/**',
+      '.env',
+      '.env.*',
+      '*.zip',
+    ],
+    // WXT leaves out entrypoints the Firefox build skips; the source zip still
+    // holds the whole extension.
+    includeSources: ['entrypoints/offscreen/**'],
+  },
   vite: () => ({
     define: {
       // See src/globals.d.ts.
