@@ -23,11 +23,13 @@ import { SITE_URL } from '../src/config';
 import { prepareForOcr } from '../src/ocrPrep';
 import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
 import type { Settings } from '../src/types';
+import { describe } from '../src/describe';
+import { getEngine } from '../src/engine';
 
-const OFFSCREEN_URL = 'offscreen.html';
 const CAPTURE_TIMEOUT_MS = 15_000;
-const OFFSCREEN_TIMEOUT_MS = 15_000;
-const OCR_TIMEOUT_MS = 120_000; // best model is slower
+// Starting the engine (up to 15 s the first time) plus reading with the best
+// model, which is slow.
+const OCR_TIMEOUT_MS = 135_000;
 const SEGMENT_TIMEOUT_MS = 120_000; // first call builds the Kiwi neural model (slow once)
 
 /**
@@ -124,10 +126,9 @@ export default defineBackground(() => {
   onMessage((msg: unknown): true | undefined => {
     const message = msg as ExtensionMessage;
     if (message.type !== 'OCR_WARM' || message.target) return undefined;
-    (async () => {
-      await ensureOffscreen();
-      await chrome.runtime.sendMessage({ type: 'OCR_WARM', target: 'offscreen' } satisfies ExtensionMessage);
-    })().catch((e) => console.warn('[Dokhae] OCR warm-up failed:', e));
+    getEngine()
+      .then((engine) => engine.warm())
+      .catch((e) => console.warn('[Dokhae] OCR warm-up failed:', e));
     return undefined;
   });
 
@@ -286,7 +287,7 @@ export default defineBackground(() => {
     }
   );
 
-  // --- Text-to-speech: fetch Google TTS audio, play it in the offscreen doc ---
+  // --- Text-to-speech: fetch the audio here, play it through the engine ---
   onMessage(
     (msg: unknown, _sender, sendResponse): true | undefined => {
       const message = msg as ExtensionMessage;
@@ -296,12 +297,7 @@ export default defineBackground(() => {
         try {
           const settings = await getSettings();
           const audioDataUrl = await resolveTtsAudio(message.text, settings);
-          await ensureOffscreen();
-          await chrome.runtime.sendMessage({
-            type: 'TTS_PLAY',
-            target: 'offscreen',
-            audioDataUrl,
-          } satisfies ExtensionMessage);
+          await (await getEngine()).play(audioDataUrl);
           sendResponse({ type: 'TTS_DONE', ok: true } satisfies ExtensionMessage);
         } catch (e) {
           console.error('[Dokhae] TTS failed:', e);
@@ -528,31 +524,20 @@ async function audioOrNull(text: string, settings: Settings): Promise<string | n
 }
 
 // ---------------------------------------------------------------------------
-// Local OCR (Tesseract in the offscreen document)
+// Local OCR (Tesseract, run by the browser's engine: src/engine)
 // ---------------------------------------------------------------------------
 
 async function tesseractOcr(
   preprocessed: string
 ): Promise<{ text: string; uncertain: number[] }> {
   report('démarrage de la lecture', 0.35);
-  await withTimeout(ensureOffscreen(), OFFSCREEN_TIMEOUT_MS, 'Le moteur de lecture a mis trop de temps à démarrer.');
-
+  const engine = await getEngine();
   report('lecture du texte', 0.4);
-  const ocr = (await withTimeout(
-    chrome.runtime.sendMessage({
-      type: 'OCR_REQUEST',
-      target: 'offscreen',
-      imageDataUrl: preprocessed,
-    } satisfies ExtensionMessage),
+  return withTimeout(
+    engine.recognize(preprocessed, report),
     OCR_TIMEOUT_MS,
     'La lecture a pris trop de temps. Essaie un cadre plus serré.'
-  )) as ExtensionMessage | undefined;
-
-  if (!ocr) throw new Error('Le moteur de lecture ne répond pas. Recharge la page et réessaie.');
-  if (ocr.type === 'OCR_ERROR') throw new Error(ocr.message);
-  return ocr.type === 'OCR_RESULT'
-    ? { text: ocr.text, uncertain: ocr.uncertain ?? [] }
-    : { text: '', uncertain: [] };
+  );
 }
 
 /**
@@ -647,41 +632,6 @@ async function fetchTts(text: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Offscreen document lifecycle
-// ---------------------------------------------------------------------------
-
-let creating: Promise<void> | null = null;
-
-async function ensureOffscreen() {
-  const existing = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT' as chrome.runtime.ContextType],
-    documentUrls: [chrome.runtime.getURL(OFFSCREEN_URL)],
-  });
-  if (existing.length > 0) return;
-
-  if (creating) {
-    await creating;
-    return;
-  }
-
-  try {
-    creating = chrome.offscreen.createDocument({
-      url: OFFSCREEN_URL,
-      reasons: ['WORKERS', 'AUDIO_PLAYBACK'] as chrome.offscreen.Reason[],
-      justification: 'Run Tesseract OCR in a Web Worker and play pronunciation audio.',
-    });
-    await creating;
-  } catch (e) {
-    // A concurrent scan may have created it already; that specific error is benign.
-    if (!String(e).includes('Only a single offscreen document')) {
-      throw new Error(`Impossible de démarrer le moteur de lecture\u00a0: ${describe(e)}`);
-    }
-  } finally {
-    creating = null;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 
@@ -690,16 +640,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> 
     p,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
   ]);
-}
-
-function describe(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'string') return e;
-  try {
-    return JSON.stringify(e);
-  } catch {
-    return String(e);
-  }
 }
 
 // ---------------------------------------------------------------------------
