@@ -73,5 +73,8 @@ describe('deviceName', () => {
     expect(
       deviceName({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/140 Safari/537.36 Edg/140' }),
     ).toBe('Edge · Mac');
+    expect(
+      deviceName({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0' }),
+    ).toBe('Firefox · Linux');
   });
 });

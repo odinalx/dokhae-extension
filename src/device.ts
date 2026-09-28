@@ -22,7 +22,8 @@ export function deviceName(nav: Pick<Navigator, 'userAgent'> & { userAgentData?:
   const ua = nav.userAgent ?? '';
   const brands = (nav.userAgentData?.brands ?? []).map((b) => b.brand);
   const browser =
-    brands.includes('Microsoft Edge') || /Edg\//.test(ua) ? 'Edge'
+    /Firefox\//.test(ua) ? 'Firefox'
+    : brands.includes('Microsoft Edge') || /Edg\//.test(ua) ? 'Edge'
     : brands.includes('Opera') || /OPR\//.test(ua) ? 'Opera'
     : brands.includes('Brave') ? 'Brave'
     : 'Chrome';
