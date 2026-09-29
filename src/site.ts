@@ -138,6 +138,17 @@ export async function analyzeOnSite(
   };
 }
 
+/**
+ * POST /api/warm: ask the server to load its analyser now. It unloads the
+ * model after a quiet spell to free memory, and loading it back takes 1 to
+ * 2 s; sent when the scan overlay opens, that load overlaps with framing,
+ * capture and OCR instead of adding to them. Best effort: a failure only
+ * means the scan pays the load itself.
+ */
+export async function warmOnSite(token: string): Promise<void> {
+  await request(token, '/api/warm', { method: 'POST', body: '{}' });
+}
+
 export interface SiteDeck {
   id: string;
   name: string;

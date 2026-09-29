@@ -16,6 +16,7 @@ import {
   SiteApiError,
   sendCardToSite,
   sendCardsToSite,
+  warmOnSite,
 } from '../src/site';
 import { createQueue, withCard, withoutIds } from '../src/queue';
 import { clearAccessCache, deckLock, getAccess, lockError, lockReason } from '../src/access';
@@ -136,6 +137,16 @@ export default defineBackground(() => {
     getEngine()
       .then((engine) => engine.warm())
       .catch((e) => console.warn('[Dokhae] OCR warm-up failed:', e));
+    // The server's analyser too: it may have been unloaded while idle, and
+    // the scan being framed is about to need it. getAccess is cached, so this
+    // costs one small request, and only for accounts that can scan.
+    getAccess()
+      .then(async (access) => {
+        if (!access.ok) return;
+        const { siteToken } = await getSettings();
+        if (siteToken) await warmOnSite(siteToken);
+      })
+      .catch((e) => console.warn('[Dokhae] analyser warm-up failed:', e));
     return undefined;
   });
 
