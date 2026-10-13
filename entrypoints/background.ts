@@ -293,7 +293,7 @@ export default defineBackground(() => {
           if (!access.ok) throw lockError(access);
 
           const mode = message.mode ?? 'user';
-          if (mode !== 'cache') report('analyse des mots', 0.8);
+          if (mode === 'user') report('analyse des mots', 0.8);
           const analysis = await analyzeText(message.text, undefined, mode);
 
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
@@ -605,7 +605,7 @@ async function analyzeText(
   const { siteToken } = await getSettings();
   if (!siteToken) return { ...empty, text: raw };
 
-  if (mode !== 'cache') report('traduction', 0.85);
+  if (mode === 'user') report('traduction', 0.85);
   try {
     return await analyzer.analyze(raw, { mode, uncertain });
   } catch (e) {

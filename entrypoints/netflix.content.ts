@@ -1,5 +1,5 @@
 import type { AnalysisResult, ExtensionMessage, Settings } from '../src/types';
-import type { AccessReason } from '../src/access';
+import type { AnalyzeMode } from '../src/analyzer';
 import { HANGUL_RE } from '../src/hangul';
 import { phraseParts } from '../src/phrase';
 import { getSettings, saveSettings, TOKEN_KEY } from '../src/settings';
@@ -25,6 +25,7 @@ import {
 } from '../src/netflix/subtitles';
 import { CueHistory, type Cue } from '../src/netflix/cues';
 import { requestSeek } from '../src/netflix/bridge';
+import { LineAnalyzer, type Outcome } from '../src/netflix/lines';
 
 /*
  * Netflix's Korean subtitles, redrawn by Dokhae: each line analysed by the
@@ -60,10 +61,6 @@ const SEEK_LEAD = 0.3;
 const JUMP_ANCHOR_MS = 2500;
 /** A line gone for less than this was a redraw, not the end of the line. */
 const LINE_END_DEBOUNCE_MS = 150;
-/** After "rate_limited", lines are shown plain this long before asking again. */
-const RATE_LIMIT_BACKOFF_MS = 3 * 60 * 1000;
-/** Analysed lines kept in memory (a film is about 1500 lines). */
-const CACHE_MAX = 2000;
 /** How many times the shortcut reminder shows, across sessions. */
 const HINT_SHOWS = 3;
 const HINT_KEY = 'netflixHintShown';
@@ -79,10 +76,6 @@ const HIDDEN_ATTR = 'data-dokhae-hidden';
  * Dokhae has even seen it (the attribute covers a renamed layer).
  */
 const KOREAN_CLASS = 'dokhae-netflix-ko';
-
-type Outcome =
-  | { ok: true; analysis: AnalysisResult }
-  | { ok: false; message: string; reason?: AccessReason; code?: string };
 
 interface Shown {
   key: string;
@@ -108,11 +101,7 @@ class NetflixSubtitles {
   private showTranslation = false;
   private hintShown = false;
   private lastTitle = '';
-  private cache = new Map<string, AnalysisResult>();
-  private inflight = new Map<string, Promise<Outcome>>();
-  private backoffUntil = 0;
-  private lockedNote: Outcome | null = null;
-  private lastError: { text: string; message: string; reason?: AccessReason } | null = null;
+  private lines = new LineAnalyzer(askBackground);
   private hiddenRoot: Element | null = null;
   private overlay: Overlay | null = null;
 
@@ -120,8 +109,7 @@ class NetflixSubtitles {
     if (area !== 'local') return;
     if (changes[TOKEN_KEY] || changes[ACCESS_KEY]) {
       // Connected, subscribed or signed out meanwhile: ask again.
-      this.lockedNote = null;
-      this.backoffUntil = 0;
+      this.lines.unlock();
     }
     if (changes[SETTINGS_KEY]) void this.loadSettings().then(() => this.sync());
   };
@@ -270,7 +258,7 @@ class NetflixSubtitles {
     this.overlay?.place(root);
     this.render();
     this.maybeShowHint();
-    void this.analyse(text).then(() => {
+    this.lines.show(text, () => {
       if (this.shown?.key === key) this.render();
     });
   }
@@ -279,6 +267,7 @@ class NetflixSubtitles {
   private endLine() {
     const ended = this.shown;
     this.shown = null;
+    this.lines.leave();
     this.overlay?.hide();
     if (!ended) return;
     const video = this.video();
@@ -309,87 +298,32 @@ class NetflixSubtitles {
   }
 
   // -------------------------------------------------------------------------
-  // Analysis, one call per distinct line
+  // Analysis: when to ask is src/netflix/lines.ts
   // -------------------------------------------------------------------------
-
-  /**
-   * The analysis of a line, from the cache or the site. Lines the site
-   * refused are not cached: they are asked again later, unless the account
-   * is locked (then the next request waits for a sign-in or a plan) or the
-   * site said to slow down (then it waits RATE_LIMIT_BACKOFF_MS).
-   */
-  private analyse(text: string, force = false): Promise<Outcome> {
-    const cached = this.cache.get(text);
-    if (cached) return Promise.resolve({ ok: true, analysis: cached });
-    if (!force && this.lockedNote) return Promise.resolve(this.lockedNote);
-    if (!force && Date.now() < this.backoffUntil) {
-      return Promise.resolve({ ok: false, message: '', code: 'rate_limited' });
-    }
-    const pending = this.inflight.get(text);
-    if (pending) return pending;
-
-    const request = (async (): Promise<Outcome> => {
-      try {
-        const resp = (await browser.runtime.sendMessage({
-          type: 'ANALYZE_TEXT',
-          text,
-        } satisfies ExtensionMessage)) as ExtensionMessage | undefined;
-        if (resp?.type === 'CAPTURE_RESULT') {
-          this.remember(text, resp.analysis);
-          return { ok: true, analysis: resp.analysis };
-        }
-        if (resp?.type === 'CAPTURE_ERROR') {
-          const outcome: Outcome = { ok: false, message: resp.message, reason: resp.reason, code: resp.code };
-          if (resp.reason && resp.reason !== 'offline') this.lockedNote = outcome;
-          if (resp.code === 'rate_limited') this.backoffUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
-          this.lastError = { text, message: resp.message, reason: resp.reason };
-          return outcome;
-        }
-        const message = 'L’extension ne répond pas. Recharge la page et réessaie.';
-        this.lastError = { text, message };
-        return { ok: false, message };
-      } catch {
-        const message = 'L’extension a été mise à jour. Actualise la page et réessaie.';
-        this.lastError = { text, message };
-        return { ok: false, message };
-      } finally {
-        this.inflight.delete(text);
-      }
-    })();
-    this.inflight.set(text, request);
-    return request;
-  }
-
-  private remember(text: string, analysis: AnalysisResult) {
-    if (this.cache.size >= CACHE_MAX) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest !== undefined) this.cache.delete(oldest);
-    }
-    this.cache.set(text, analysis);
-  }
 
   /** What the overlay shows for the current line, from what is known so far. */
   private render() {
     const shown = this.shown;
     if (!shown || !this.overlay) return;
-    const analysis = this.cache.get(shown.text);
+    const analysis = this.lines.cached(shown.text);
     if (analysis) {
       this.overlay.showWords(shown, analysis, this.showTranslation);
       return;
     }
-    const pending = this.inflight.has(shown.text);
+    const pending = this.lines.isPending(shown.text);
+    const { locked, lastError } = this.lines;
     let note: OverlayNote | null = null;
-    if (!pending && this.lockedNote && !this.lockedNote.ok) {
-      note = { text: this.lockedNote.message, action: lockAction(this.lockedNote.reason) };
-    } else if (!pending && Date.now() < this.backoffUntil) {
+    if (!pending && locked) {
+      note = { text: locked.message, action: lockAction(locked.reason) };
+    } else if (!pending && this.lines.backingOff()) {
       note = {
         text: 'Beaucoup de répliques analysées d’un coup. Dokhae reprend dans quelques minutes · clique la ligne pour l’analyser maintenant.',
         action: null,
       };
-    } else if (!pending && this.lastError?.text === shown.text) {
+    } else if (!pending && lastError?.text === shown.text) {
       note = {
-        text: `${this.lastError.message} · clique la ligne pour réessayer.`,
-        action: lockAction(this.lastError.reason),
+        text: `${lastError.message} · clique la ligne pour réessayer.`,
+        action: lockAction(lastError.reason),
       };
     }
     this.overlay.showPlain(shown, note, pending);
@@ -400,7 +334,7 @@ class NetflixSubtitles {
     const shown = this.shown;
     if (!shown) return;
     const key = shown.key;
-    const run = this.analyse(shown.text, true);
+    const run = this.lines.analyse(shown.text, true);
     this.render();
     void run.then(() => {
       if (this.shown?.key === key) this.render();
@@ -510,6 +444,20 @@ class NetflixSubtitles {
       })
       .catch(() => {});
   }
+}
+
+/** One ANALYZE_TEXT round trip to the background, as an Outcome. */
+async function askBackground(text: string, mode: AnalyzeMode): Promise<Outcome> {
+  const resp = (await browser.runtime.sendMessage({
+    type: 'ANALYZE_TEXT',
+    text,
+    mode,
+  } satisfies ExtensionMessage)) as ExtensionMessage | undefined;
+  if (resp?.type === 'CAPTURE_RESULT') return { ok: true, analysis: resp.analysis };
+  if (resp?.type === 'CAPTURE_ERROR') {
+    return { ok: false, message: resp.message, reason: resp.reason, code: resp.code, retryAt: resp.retryAt };
+  }
+  return { ok: false, message: 'L’extension ne répond pas. Recharge la page et réessaie.' };
 }
 
 // ---------------------------------------------------------------------------
