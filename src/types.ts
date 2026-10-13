@@ -1,4 +1,5 @@
-import type { AccessReason } from './access';
+import type { AccessForce, AccessReason } from './access';
+import type { AnalyzeMode } from './analyzer';
 
 export interface SelectionRect {
   x: number;
@@ -28,6 +29,10 @@ export interface Settings {
   ankiConnectUrl: string; // e.g. "http://127.0.0.1:8765"
   ankiDeck: string;       // target deck name
   ankiAutoSend: boolean;  // push each card to Anki immediately instead of queueing
+  // Netflix: Korean subtitles redrawn as clickable, analysed words.
+  netflixSubtitles: boolean;
+  // Netflix: pause the video when each subtitle line ends.
+  netflixAutoPause: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +45,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ankiConnectUrl: 'http://127.0.0.1:8765',
   ankiDeck: 'Dokhae',
   ankiAutoSend: false,
+  netflixSubtitles: true,
+  netflixAutoPause: false,
 };
 
 // One Anki card waiting in the session queue (or being sent directly).
@@ -93,6 +100,10 @@ export interface CaptureError {
   message: string;
   /** Set when the reader can fix it: the panel then offers the right button. */
   reason?: AccessReason;
+  /** The site's error code when it answered one ("rate_limited", …). */
+  code?: string;
+  /** With "rate_limited": when automatic requests may resume (ms since epoch). */
+  retryAt?: number;
 }
 
 // background -> content script (activate the drag overlay)
@@ -140,6 +151,12 @@ export interface AnalyzeSelection {
 export interface AnalyzeTextRequest {
   type: 'ANALYZE_TEXT';
   text: string;
+  /**
+   * Who is asking (src/analyzer.ts): 'user' by default; 'auto' for a Netflix
+   * line, held back while the site rate limits; 'cache' to answer only from
+   * the cache, with code "cache_miss" otherwise.
+   */
+  mode?: AnalyzeMode;
 }
 
 // background -> offscreen document (OCR)
@@ -196,7 +213,7 @@ export interface TtsPlay {
 // Dokhae website), and on which plan? `force` bypasses the cached check.
 export interface AccessCheckRequest {
   type: 'ACCESS_CHECK';
-  force?: boolean;
+  force?: AccessForce;
 }
 export interface AccessInfo {
   type: 'ACCESS_INFO';

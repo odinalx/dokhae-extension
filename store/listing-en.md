@@ -22,13 +22,15 @@ How it works:
 4. Click a word: translation, dictionary form, speech level, example sentence and pronunciation.
 5. "Ajouter au deck": the word joins your spaced-repetition reviews on dokhae.fr.
 
+On Netflix, with Korean subtitles on, Dokhae redraws each line word by word in the same place, fullscreen included: every word is underlined by part of speech and clickable. A click pauses the video and opens the word's card; "Ajouter au deck" keeps the whole line as the example, with its translation and the episode title. While watching: A goes back to the previous line, R replays it, T shows the translation, P pauses at the end of each line. All of it can be switched off in the settings.
+
 You can also select Korean text on any page, then right-click and choose "Analyser avec Dokhae", or click "Analyser la sélection" in the extension's window.
 
 Every word you add keeps a link to the page you found it on: from your reviews, one click takes you back to the chapter.
 
 What matters:
 • Text recognition runs on your computer. Only the recognised text is sent to Dokhae for analysis.
-• Dokhae only reads the tab you call it on, when you call it. Nothing runs in the background on the sites you visit.
+• Dokhae only reads the tab you call it on, when you call it. The one exception is Netflix: while you watch, Dokhae reads the subtitle shown on screen (never the video or the subtitle file), and only when it is Korean. A switch turns it off.
 • No ads, no data sales.
 • Words can go to Anki instead (AnkiConnect add-on), if you prefer.
 
@@ -42,7 +44,7 @@ Education
 
 ## Single purpose
 
-Help people read Korean in webtoons and on the web: the extension reads the Korean text in an area or selection the user picks, explains it word by word, and saves the words they choose to their Dokhae review deck.
+Help people read Korean in webtoons, on the web and in Netflix subtitles: the extension reads the Korean text in an area or selection the user picks, or the Korean subtitle the Netflix player shows, explains it word by word, and saves the words they choose to their Dokhae review deck.
 
 ## Permission justifications
 
@@ -50,13 +52,14 @@ Help people read Korean in webtoons and on the web: the extension reads the Kore
 |---|---|
 | `activeTab` | When the user clicks "Scanner une bulle" or the context menu entry, the extension gets the active tab, and only that tab, to show the selection overlay and capture the visible area they frame. |
 | `scripting` | Inject the Dokhae panel into the active tab on demand (under `activeTab`), instead of declaring a content script on every site. |
-| `storage` | Keep settings (Dokhae access token, a random id for this install, chosen deck, Anki option), the cached subscription state, and words waiting to be sent. |
+| `storage` | Keep settings (Dokhae access token, a random id for this install, chosen deck, Anki option), the cached subscription state, words waiting to be sent, and, on this device only, the analyses of sentences already read (so the server is not asked again; cleared on sign-out). |
 | `offscreen` | Run text recognition (Tesseract, WebAssembly) in a Web Worker and play pronunciation audio; a service worker can do neither. |
 | `contextMenus` | The "Analyser avec Dokhae" right-click entry on selected text. |
 | `https://dokhae.fr/*` | The Dokhae API: account check, analysis of the recognised text, saving words to the deck. The one-click connect script runs only on `https://dokhae.fr/connect-extension`. |
 | `https://translate.google.com/*` | Fallback pronunciation voice (Google text to speech) when the dictionary has no recording. |
 | `https://ko.dict.naver.com/*` | Look up a word's audio recording in Naver's Korean dictionary. |
 | `https://dict-dn.pstatic.net/*` | Download that audio file (Naver dictionary's file server). |
+| `https://www.netflix.com/*` (content scripts) | Read the Korean subtitle the Netflix player shows, redraw it word by word and make it clickable, pause the video when a word is clicked, and go back to a line through Netflix's own player. The script matches the whole domain because Netflix changes pages without reloading, but it does nothing outside `/watch/`. Neither the video nor the subtitle files are downloaded. |
 | `http://127.0.0.1:8765/*`, `http://localhost:8765/*` | AnkiConnect on the user's own computer, used only if they pick Anki as the destination for their cards. |
 
 Remote code: **no**. All code ships in the package, the Korean recognition model included.
@@ -66,7 +69,7 @@ Remote code: **no**. All code ships in the package, the Korean recognition model
 Data collected:
 - **Personally identifiable information**: yes, the Dokhae account email, received from the site to show which account is connected.
 - **Authentication information**: yes, the Dokhae access token (`sori_…`), stored locally and only ever sent to dokhae.fr.
-- **Website content**: yes, the Korean text recognised in the framed area (or the selected text) is sent to dokhae.fr for analysis. Words the user listens to are sent to the Naver dictionary or Google for pronunciation.
+- **Website content**: yes, the Korean text recognised in the framed area (or the selected text, or the Korean subtitle shown on Netflix) is sent to dokhae.fr for analysis. Words the user listens to are sent to the Naver dictionary or Google for pronunciation.
 - **Web history**: yes, to be safe: when the user adds a word to their deck, the address of the page it came from is saved with the card, so they can go back to it. Nothing is sent until they add a word.
 - Health, financial, personal communications, location, user activity: **no**.
 

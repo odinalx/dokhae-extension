@@ -1,3 +1,4 @@
+import { parseRetryAfter } from './backoff';
 import { SITE_URL } from './config';
 import { TOKEN_RE } from './connect';
 import { romanize } from './romanize';
@@ -23,7 +24,9 @@ export class SiteApiError extends Error {
     readonly status: number,
     readonly code: string,
     /** For `device_revoked`: why ("reuse", "replaced", "user", …). */
-    readonly detail?: string
+    readonly detail?: string,
+    /** For `rate_limited`: the wait the site asked for (Retry-After), when it said. */
+    readonly retryAfterMs?: number
   ) {
     super(message);
   }
@@ -47,7 +50,7 @@ export function revokedMessage(reason: string | undefined): string {
 
 const FRENCH_ERRORS: Record<string, string> = {
   subscription_required: `Scanner fait partie de l'abonnement Dokhae. Pour un nouveau compte, le premier mois est à 2,99\u00a0€.`,
-  rate_limited: 'Trop de scans d\'un coup. Réessaie dans un moment.',
+  rate_limited: 'Trop d’analyses d’un coup. Réessaie dans quelques minutes.',
   http_401: `Ton accès à Dokhae a expiré ou a été révoqué. Reconnecte ton compte.`,
 };
 
@@ -75,6 +78,12 @@ async function request(token: string, path: string, init?: RequestInit): Promise
     }
     // The API speaks English (it also serves the app); the codes the reader
     // can act on get French wording here.
+    if (res.status === 429 || code === 'rate_limited') {
+      throw new SiteApiError(
+        FRENCH_ERRORS.rate_limited!, res.status, 'rate_limited', undefined,
+        parseRetryAfter(res.headers.get('Retry-After')),
+      );
+    }
     const french = FRENCH_ERRORS[res.status === 401 ? 'http_401' : code];
     const message =
       french ? french
@@ -223,11 +232,68 @@ export function isRejectedCard(e: unknown): boolean {
 
 export const REJECTED_CARD_NOTICE = 'refusée par Dokhae (mot ou traduction invalide), retirée de la file';
 
-/** Send a batch of queued cards to the site; mirrors sendCardsToAnki's shape. */
+/** Cards per POST /api/cards/batch (the site's limit is 200). */
+const BATCH_MAX = 200;
+
+/**
+ * Send the queued cards to the site; mirrors sendCardsToAnki's shape.
+ *
+ * One POST /api/cards/batch per 200 cards, where "Tout envoyer" used to make
+ * one request per card. The site answers a verdict per card, in order:
+ * "added" or "exists" leave the queue, "invalid" is dropped (resending it
+ * would fail forever). A batch that fails as a whole keeps all its cards
+ * for the next try. A site without the batch route (404) gets the cards one
+ * by one, as before.
+ */
 export async function sendCardsToSite(
   token: string,
   cards: AnkiCardDraft[],
   deckId = ''
+): Promise<SiteSendResult> {
+  const addedIds: string[] = [];
+  const droppedIds: string[] = [];
+  const failures: string[] = [];
+  for (let i = 0; i < cards.length; i += BATCH_MAX) {
+    const chunk = cards.slice(i, i + BATCH_MAX);
+    let results: unknown;
+    try {
+      const body = (await request(token, '/api/cards/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          words: chunk.map((card) => ({ ...toWordInput(card), ...(deckId ? { deckId } : {}) })),
+        }),
+      })) as { results?: unknown };
+      results = body.results;
+    } catch (e) {
+      if (e instanceof SiteApiError && e.status === 404) {
+        const one = await sendCardsOneByOne(token, cards.slice(i), deckId);
+        return {
+          addedIds: [...addedIds, ...one.addedIds],
+          droppedIds: [...droppedIds, ...one.droppedIds],
+          failed: failures.length + one.failed,
+          failures: [...failures, ...one.failures],
+        };
+      }
+      const why = e instanceof Error ? e.message : String(e);
+      for (const card of chunk) failures.push(`${card.word}\u00a0: ${why}`);
+      continue;
+    }
+    chunk.forEach((card, j) => {
+      const status = Array.isArray(results) ? (results[j] as { status?: unknown } | undefined)?.status : undefined;
+      if (status === 'added' || status === 'exists') addedIds.push(card.id);
+      else if (status === 'invalid') {
+        droppedIds.push(card.id);
+        failures.push(`${card.word}\u00a0: ${REJECTED_CARD_NOTICE}`);
+      } else failures.push(`${card.word}\u00a0: réponse inattendue du site`);
+    });
+  }
+  return { addedIds, droppedIds, failed: failures.length, failures };
+}
+
+async function sendCardsOneByOne(
+  token: string,
+  cards: AnkiCardDraft[],
+  deckId: string
 ): Promise<SiteSendResult> {
   const addedIds: string[] = [];
   const droppedIds: string[] = [];

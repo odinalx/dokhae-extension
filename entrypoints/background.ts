@@ -19,7 +19,7 @@ import {
   warmOnSite,
 } from '../src/site';
 import { createQueue, withCard, withoutIds } from '../src/queue';
-import { clearAccessCache, deckLock, getAccess, lockError, lockReason } from '../src/access';
+import { type AccessState, clearAccessCache, deckLock, getAccess, lockError, lockReason, rememberAccount } from '../src/access';
 import { SITE_URL } from '../src/config';
 import { prepareForOcr } from '../src/ocrPrep';
 import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
@@ -27,6 +27,9 @@ import type { Settings } from '../src/types';
 import { describe } from '../src/describe';
 import { getEngine } from '../src/engine';
 import { hasSiteAccess } from '../src/permissions';
+import { analysisCache } from '../src/analysisCache';
+import { BackingOffError, CacheMissError, createAnalyzer, type AnalyzeMode } from '../src/analyzer';
+import { NO_BACKOFF, type BackoffState } from '../src/backoff';
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 // Starting the engine (up to 15 s the first time) plus reading with the best
@@ -58,11 +61,21 @@ const onMessage = (listener: DecliningListener): void =>
     listener as Parameters<typeof browser.runtime.onMessage.addListener>[0],
   );
 
+/*
+ * The tab whose panel shows the progress of the scan or selection running
+ * now. Progress used to go out with runtime.sendMessage, which reaches the
+ * extension's own pages but never a content script: the panel's progress
+ * bar had nothing to show. It goes to the tab now, and the offscreen
+ * document's OCR progress is relayed there too.
+ */
+let progressTab: number | null = null;
+
 // Push a status line to the result panel (and the background console).
 function report(status: string, progress: number) {
   console.log(`[Dokhae] ${status} (${Math.round(progress * 100)}%)`);
-  chrome.runtime
-    .sendMessage({ type: 'OCR_PROGRESS', status, progress } satisfies ExtensionMessage)
+  if (progressTab == null) return;
+  chrome.tabs
+    .sendMessage(progressTab, { type: 'OCR_PROGRESS', status, progress } satisfies ExtensionMessage)
     .catch(() => {});
 }
 
@@ -139,14 +152,25 @@ export default defineBackground(() => {
       .catch((e) => console.warn('[Dokhae] OCR warm-up failed:', e));
     // The server's analyser too: it may have been unloaded while idle, and
     // the scan being framed is about to need it. getAccess is cached, so this
-    // costs one small request, and only for accounts that can scan.
-    getAccess()
-      .then(async (access) => {
-        if (!access.ok) return;
-        const { siteToken } = await getSettings();
-        if (siteToken) await warmOnSite(siteToken);
-      })
-      .catch((e) => console.warn('[Dokhae] analyser warm-up failed:', e));
+    // costs one small request, only for accounts that can scan, and only
+    // when the analyser has been idle long enough to be unloaded.
+    (async () => {
+      if (await analyserRecentlyUsed()) return;
+      const access = await getAccess();
+      if (!access.ok) return;
+      const { siteToken } = await getSettings();
+      if (!siteToken) return;
+      await warmOnSite(siteToken);
+      await noteAnalyserUsed();
+    })().catch((e) => console.warn('[Dokhae] analyser warm-up failed:', e));
+    return undefined;
+  });
+
+  // --- OCR progress from the offscreen document (Chrome): on to the panel ---
+  onMessage((msg: unknown, sender): true | undefined => {
+    const message = msg as ExtensionMessage;
+    if (message.type !== 'OCR_PROGRESS' || sender.tab) return undefined;
+    report(message.status, message.progress);
     return undefined;
   });
 
@@ -174,9 +198,9 @@ export default defineBackground(() => {
       try {
         const account = await fetchAccount(message.token);
         await setSiteToken(message.token);
-        await clearAccessCache();
-        // Warm the cache with the verdict we already have.
-        await getAccess(true);
+        // Cache the verdict this answer already gives: a second /api/me
+        // right after the first only cost a request.
+        await rememberAccount(account);
         done({ ok: true, email: account.email, subscribed: account.subscribed });
       } catch (e) {
         console.warn('[Dokhae] connect failed:', e);
@@ -195,7 +219,12 @@ export default defineBackground(() => {
       if (message.type !== 'ACCESS_CHECK') return undefined;
 
       (async () => {
-        const state = await getAccess(message.force ?? false);
+        const state = await getAccess(message.force ?? false).catch(
+          (e): AccessState => {
+            console.warn('[Dokhae] access check failed:', e);
+            return { ok: false, reason: 'offline', checkedAt: 0 };
+          },
+        );
         sendResponse({
           type: 'ACCESS_INFO',
           ok: state.ok,
@@ -225,6 +254,7 @@ export default defineBackground(() => {
 
           const windowId = sender.tab?.windowId;
           if (windowId == null) throw new Error("Impossible de trouver la fenêtre active.");
+          progressTab = sender.tab?.id ?? null;
 
           // --- Capture ---
           report('capture de l\'écran', 0.1);
@@ -264,8 +294,10 @@ export default defineBackground(() => {
           report('analyse des mots', 0.8);
           const analysis = await analyzeText(ocr.text, ocr.uncertain);
 
+          progressTab = null;
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
         } catch (e) {
+          progressTab = null;
           console.error('[Dokhae] capture pipeline failed:', e);
           sendResponse({
             type: 'CAPTURE_ERROR', message: describe(e), reason: lockReason(e),
@@ -279,7 +311,7 @@ export default defineBackground(() => {
 
   // --- Analyze selected text: same pipeline as a scan, minus capture/OCR ---
   onMessage(
-    (msg: unknown, _sender, sendResponse): true | undefined => {
+    (msg: unknown, sender, sendResponse): true | undefined => {
       const message = msg as ExtensionMessage;
       if (message.type !== 'ANALYZE_TEXT') return undefined;
 
@@ -289,14 +321,29 @@ export default defineBackground(() => {
           const access = await getAccess();
           if (!access.ok) throw lockError(access);
 
-          report('analyse des mots', 0.8);
-          const analysis = await analyzeText(message.text);
+          const mode = message.mode ?? 'user';
+          if (mode === 'user') {
+            progressTab = sender.tab?.id ?? null;
+            report('analyse des mots', 0.8);
+          }
+          const analysis = await analyzeText(message.text, undefined, mode);
+          if (mode === 'user') progressTab = null;
 
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
         } catch (e) {
-          console.error('[Dokhae] analyze-text pipeline failed:', e);
+          if ((message.mode ?? 'user') === 'user') progressTab = null;
+          if (!(e instanceof CacheMissError || e instanceof BackingOffError)) {
+            console.error('[Dokhae] analyze-text pipeline failed:', e);
+          }
+          const retryAt = (e as { retryAt?: unknown }).retryAt;
           sendResponse({
             type: 'CAPTURE_ERROR', message: describe(e), reason: lockReason(e),
+            // The Netflix subtitles back off on "rate_limited" instead of
+            // asking again on every line, and skip a "cache_miss".
+            ...(e instanceof SiteApiError || e instanceof CacheMissError || e instanceof BackingOffError
+              ? { code: e.code }
+              : {}),
+            ...(typeof retryAt === 'number' ? { retryAt } : {}),
           } satisfies ExtensionMessage);
         }
       })();
@@ -564,8 +611,8 @@ async function tesseractOcr(
  * This used to run entirely in-page: Kiwi's wasm in a sandboxed iframe (its
  * Emscripten glue needs `unsafe-eval`, which only a sandboxed page's CSP may
  * grant) driven from the offscreen document, with the model bytes transferred
- * in over postMessage. All of that — and the ~84 MB model shipped inside every
- * install — is now one HTTP call, shared with the mobile app.
+ * in over postMessage. All of that, and the ~84 MB model shipped inside every
+ * install, is now one HTTP call, shared with the mobile app.
  *
  * OCR stays local: it's free, works offline, and Tesseract handles the crisp
  * rendered text of a webtoon panel well.
@@ -574,21 +621,29 @@ async function tesseractOcr(
  * text may hold look-alikes of syllables the model cannot print, and which
  * syllables were read with low confidence. Selected page text sends none.
  *
+ * The call goes through `analyzer` (src/analyzer.ts): cache, shared
+ * in-flight requests, back-off after a 429.
+ *
  * Empty text short-circuits. An error the site answered (or a network
  * failure) is rethrown with its French message; anything else degrades to
  * showing the recognised text with no analysis.
  */
-async function analyzeText(raw: string, uncertain?: number[]): Promise<AnalysisResult> {
+async function analyzeText(
+  raw: string,
+  uncertain?: number[],
+  mode: AnalyzeMode = 'user',
+): Promise<AnalysisResult> {
   const empty = { text: '', sentenceTranslation: '', tone: '', words: [] };
   if (!raw?.trim()) return empty;
 
   const { siteToken } = await getSettings();
   if (!siteToken) return { ...empty, text: raw };
 
-  report('traduction', 0.85);
+  if (mode === 'user') report('traduction', 0.85);
   try {
-    return await analyzeOnSite(siteToken, raw, uncertain);
+    return await analyzer.analyze(raw, { mode, uncertain });
   } catch (e) {
+    if (e instanceof CacheMissError || e instanceof BackingOffError) throw e;
     console.error('[Dokhae] analysis failed:', e);
     // The site said no (expired plan, rate limit, revoked token, unreachable):
     // show its French message instead of a silent, unanalysed result.
@@ -602,6 +657,53 @@ async function analyzeText(raw: string, uncertain?: number[]): Promise<AnalysisR
   }
 }
 
+const BACKOFF_KEY = 'analyzeBackoff';
+
+/*
+ * The site unloads its analyser after 10 quiet minutes (KIWI_IDLE_MINUTES on
+ * the site). Opening the scan overlay warmed it every time, one more request
+ * per scan; it is skipped while an analysis or a warm-up went through less
+ * than WARM_SKIP_MS ago. Kept in storage.session: Chrome restarts its service
+ * worker after 30 s of quiet, which would forget a plain variable.
+ */
+const WARM_SKIP_MS = 5 * 60 * 1000;
+const ANALYSER_USED_KEY = 'analyserUsedAt';
+
+async function analyserRecentlyUsed(): Promise<boolean> {
+  try {
+    const stored = await chrome.storage.session.get(ANALYSER_USED_KEY);
+    const at = Number(stored[ANALYSER_USED_KEY] ?? 0);
+    return Date.now() - at < WARM_SKIP_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function noteAnalyserUsed(): Promise<void> {
+  try {
+    await chrome.storage.session.set({ [ANALYSER_USED_KEY]: Date.now() });
+  } catch {
+    /* no session storage: the next scan warms again, as before */
+  }
+}
+
+const analyzer = createAnalyzer({
+  cache: analysisCache(),
+  async fetch(text, uncertain) {
+    const { siteToken } = await getSettings();
+    const analysis = await analyzeOnSite(siteToken, text, uncertain);
+    await noteAnalyserUsed();
+    return analysis;
+  },
+  async loadBackoff() {
+    const stored = await chrome.storage.local.get(BACKOFF_KEY);
+    return (stored[BACKOFF_KEY] as BackoffState | undefined) ?? NO_BACKOFF;
+  },
+  async saveBackoff(state) {
+    await chrome.storage.local.set({ [BACKOFF_KEY]: state });
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Text-to-speech
 // ---------------------------------------------------------------------------
@@ -610,7 +712,23 @@ async function analyzeText(raw: string, uncertain?: number[]): Promise<AnalysisR
 //   1. Naver dictionary pronunciation (free, natural) — single dictionary words
 //   2. Clova Voice (paid, if keys configured)
 //   3. Google TTS (free, simple) — always works as a fallback
+// Audio already fetched, by text: replaying a word (the speaker button is
+// pressed again and again while learning it) cost one or two requests each
+// time. Small and in memory: the background's life is enough.
+const ttsCache = new Map<string, string>();
+const TTS_CACHE_MAX = 40;
+
 async function resolveTtsAudio(text: string, settings: Settings): Promise<string> {
+  const key = `${hasVoiceCreds(settings) ? settings.voiceSpeaker : ''}|${text.trim()}`;
+  const known = ttsCache.get(key);
+  if (known) return known;
+  const audio = await fetchTtsAudio(text, settings);
+  if (ttsCache.size >= TTS_CACHE_MAX) ttsCache.delete(ttsCache.keys().next().value!);
+  ttsCache.set(key, audio);
+  return audio;
+}
+
+async function fetchTtsAudio(text: string, settings: Settings): Promise<string> {
   const word = text.trim();
 
   if (!/\s/.test(word)) {

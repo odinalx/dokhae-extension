@@ -13,6 +13,9 @@ Korean webtoons, built for both from the same source. Drag a box over a speech b
 - **saves** the words you pick to your Dokhae deck on https://dokhae.fr (or,
   if you prefer, sends them to Anki).
 
+On Netflix it also turns Korean subtitles into clickable, analysed lines
+(see [Netflix subtitles](#netflix-subtitles)).
+
 The interface is in French. It is the browser client of the
 [Dokhae website](../site), which also serves the mobile app.
 
@@ -25,6 +28,7 @@ The interface is in French. It is the browser client of the
 
 - [Connect your account](#connect-your-account)
 - [How to use](#how-to-use)
+- [Netflix subtitles](#netflix-subtitles)
 - [How it works](#how-it-works)
 - [Build and install](#build-and-install)
 - [Publishing on the Chrome Web Store](#publishing-on-the-chrome-web-store)
@@ -79,6 +83,77 @@ renamed there. Without a choice, words land in your first deck.
 Selected text works too: right-click a Korean selection and choose
 **Analyser « … » avec Dokhae** to get the same panel without capture or OCR.
 
+## Netflix subtitles
+
+On `https://www.netflix.com/watch/…`, with Korean subtitles chosen in the
+player, Dokhae hides the player's line and draws its own in the same place
+(fullscreen included): the line analysed by `POST /api/analyze`, each word
+underlined in its part-of-speech colour. Lines in another language are left
+alone.
+
+- **Click a word**: the video pauses and the usual panel opens on that word's
+  card (meaning, dictionary form, ending, register, other senses).
+  **Ajouter au deck** saves it with the whole subtitle line as the example
+  and its translation, source `Netflix · <title shown by the player>`, and a
+  link back to the moment (`/watch/<id>?t=<seconds>`). Closing the panel
+  resumes playback.
+- **Keys while watching** (none of them is a Netflix shortcut; ignored with
+  Ctrl, Alt or Cmd, and until a Korean line has been seen):
+  `A` previous line, `R` replay the line, `T` show or hide the translation,
+  `P` pause at the end of each line.
+- **Settings**: "Sous-titres Netflix interactifs" (on by default) and
+  "Pause à la fin de chaque réplique" (off by default), in the settings page.
+- **Locked account**: the line shows as is, with the usual message and
+  **Connecter mon compte** or **Voir les formules**.
+
+How it is built:
+
+- `entrypoints/netflix.content.ts` is declared for all of
+  `https://www.netflix.com/*`, because Netflix is a single-page app (going
+  from the catalogue to a title loads no new page), and idles outside
+  `/watch/`. A `MutationObserver` reads the line once per frame at most,
+  and only for mutations of the subtitle layer (the player's clock and
+  controls change all the time).
+- Every selector lives in `src/netflix/subtitles.ts`
+  (`.player-timedtext`, `.player-timedtext-text-container`,
+  `[data-uia="video-title"]`, with looser fallbacks). Netflix renames its
+  classes from time to time: that file and its tests
+  (`src/__tests__/netflixSubtitles.test.ts`) are what to update.
+- Only the text on screen is read. Line starts are the `<video>`'s
+  `currentTime` when each line appears (`src/netflix/cues.ts`), which is
+  what "previous" and "replay" jump to.
+- Seeking goes through Netflix's player API
+  (`netflix.appContext.state.playerApp.getAPI().videoPlayer`) from
+  `entrypoints/netflix-seek.content.ts`, a few lines in the page's `MAIN`
+  world: setting `currentTime` directly crashes Netflix's player (M7375).
+- When to ask for a line is `src/netflix/lines.ts`: a line the tab knows
+  costs nothing, the background's persistent cache is asked at once, and
+  the site only once the line has stayed 300 ms on screen. The site allows
+  120 analyses an hour per account (`hitAnalyzeLimit`), which a series uses
+  in 10 to 15 minutes; `src/__tests__/netflixRequests.test.ts` counts what a
+  200-line viewing costs. Raising that budget for Netflix is a site-side
+  decision.
+
+## Requests to the site
+
+Every analysis goes through `src/analyzer.ts` in the background:
+
+- plain text (a selection, a subtitle line) is answered from a persistent
+  cache (`src/analysisCache.ts`, IndexedDB, 3000 lines, 30 days), keyed by
+  the text with spacing normalised; scans always go to the site, since the
+  server may correct their OCR text. Signing out clears it;
+- two requests for the same line at once share one call;
+- after a 429 the background backs off (2 minutes, doubling up to an hour,
+  or the site's `Retry-After`): automatic requests (Netflix lines) wait
+  without touching the network, a reader's click still goes through.
+
+`GET /api/me` is shared by concurrent checks and not forced by the popup
+for an unlocked account; `POST /api/warm` is skipped when the analyser was
+used in the last 5 minutes; "Tout envoyer" sends the queue in one
+`POST /api/cards/batch`; pronunciations are kept in memory (40).
+- Image-based subtitles (some titles draw their subtitles as pictures) have
+  no text to read: Dokhae then leaves the player's line alone.
+
 ## How it works
 
 1. **Capture (background + content script).** No content script is declared
@@ -129,6 +204,11 @@ browsers (`build:chrome` and `build:firefox` build one).
 - **Firefox:** open `about:debugging#/runtime/this-firefox`, **Load Temporary
   Add-on** and pick `.output/firefox-mv3/manifest.json`. `npm run dev:firefox`
   does the same with live reload.
+
+Firefox treats every host as optional, content scripts' included. The
+first-run page asks for the required hosts and `www.netflix.com` in one
+prompt; if Netflix alone is missing, the popup and the settings offer a
+button to allow it (`src/permissions.ts`), and the rest keeps working.
 
 ### One source, two browsers
 
@@ -193,7 +273,7 @@ lacks them, drop `_NanumGothic-Regular.ttf`, `_NanumMyeongjo-Regular.ttf` and
 | Account | Dokhae API, `GET /api/me`; token from `/connect-extension` |
 | Flashcards | Dokhae deck (`POST /api/cards`, default) or AnkiConnect |
 | Pronunciation | Naver dictionary audio, then Google TTS |
-| Permissions | `activeTab`, `scripting`, `storage`, `offscreen`, `contextMenus`; hosts: the site, Naver dictionary audio, Google TTS, AnkiConnect on localhost |
+| Permissions | `activeTab`, `scripting`, `storage`, `offscreen`, `contextMenus`; hosts: the site, Naver dictionary audio, Google TTS, AnkiConnect on localhost; content scripts: the site's connect page and `https://www.netflix.com/*` |
 
 The Clova Voice (Naver Cloud) code path is still in the source, but its
 settings are hidden (`SHOW_NAVER_CLOUD = false` in

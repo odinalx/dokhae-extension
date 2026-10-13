@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SETTINGS, type ExtensionMessage, type Settings } from '../../src/types';
 import { getSettings, saveSettings, hasVoiceCreds, setSiteToken, TOKEN_KEY } from '../../src/settings';
+import { analysisCache } from '../../src/analysisCache';
 import { fetchDecks, logoutDevice, revokedMessage, type SiteDeck } from '../../src/site';
 import { clearAccessCache } from '../../src/access';
+import { hasNetflixAccess, requestNetflixAccess } from '../../src/permissions';
 import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
 
@@ -90,10 +92,21 @@ export function App() {
     if (token) await logoutDevice(token).catch(() => {});
     await setSiteToken('');
     await clearAccessCache();
+    // The lines read on this browser stay on it: signing out forgets them.
+    await analysisCache().clear();
     setSettings((s) => ({ ...s, siteToken: '' }));
     setSavedToken('');
     savedTokenRef.current = '';
     void refreshAccess(true);
+  };
+
+  // Firefox lets the reader withhold netflix.com: the subtitles then stay off.
+  const [netflixAccess, setNetflixAccess] = useState(true);
+  useEffect(() => {
+    void hasNetflixAccess().then(setNetflixAccess);
+  }, []);
+  const allowNetflix = () => {
+    requestNetflixAccess().then(setNetflixAccess).catch(() => {});
   };
 
   const connected = Boolean(access?.ok || access?.reason === 'not-subscribed');
@@ -289,6 +302,52 @@ export function App() {
           </label>
         </section>
       )}
+
+      <section aria-labelledby="netflix-title">
+        <div className="sec-head">
+          <h2 id="netflix-title">Netflix</h2>
+          <span className={settings.netflixSubtitles ? 'badge on' : 'badge'}>
+            {settings.netflixSubtitles ? 'activé' : 'désactivé'}
+          </span>
+        </div>
+        <p className="hint">
+          Sur netflix.com, avec les sous-titres coréens affichés, Dokhae redessine chaque
+          réplique mot à mot. Clique un mot pour sa fiche, la vidéo se met en pause.
+          Raccourcis pendant la lecture{NB}: <kbd>A</kbd> réplique précédente, <kbd>R</kbd>{' '}
+          rejouer la réplique, <kbd>T</kbd> traduction, <kbd>P</kbd> pause automatique.
+        </p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.netflixSubtitles}
+            onChange={(e) => update({ netflixSubtitles: e.target.checked })}
+          />
+          <span>
+            <strong>Sous-titres Netflix interactifs</strong><br />
+            Remplace les sous-titres coréens de Netflix par la ligne analysée de Dokhae.
+          </span>
+        </label>
+        {settings.netflixSubtitles && !netflixAccess && (
+          <div className="notice warn-hint" role="alert">
+            <p>Ton navigateur n’autorise pas encore Dokhae sur netflix.com.</p>
+            <div className="actions">
+              <button className="btn btn-quiet" onClick={allowNetflix}>Autoriser netflix.com</button>
+            </div>
+          </div>
+        )}
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.netflixAutoPause}
+            onChange={(e) => update({ netflixAutoPause: e.target.checked })}
+            disabled={!settings.netflixSubtitles}
+          />
+          <span>
+            <strong>Pause à la fin de chaque réplique</strong><br />
+            Le temps de lire avant la suite. <kbd>P</kbd> l’active ou la coupe pendant la lecture.
+          </span>
+        </label>
+      </section>
 
       {SHOW_NAVER_CLOUD && (<>
       <section>

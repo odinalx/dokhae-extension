@@ -187,3 +187,12 @@ a.btn-quiet, a.btn-quiet:hover { color: var(--wkr-text); }
 }
 .notice.warn-hint { background: #fbeeeb; }
 
+
+/* Keyboard shortcuts named in a hint (the Netflix section). */
+kbd {
+  display: inline-block; min-width: 1.6em; padding: 0 5px;
+  font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.6;
+  text-align: center; color: var(--wkr-text);
+  background: var(--wkr-bg); border: 1px solid var(--wkr-border-edge); border-radius: 6px;
+}
+label.checkbox:has(input:disabled) { cursor: default; opacity: 0.6; }

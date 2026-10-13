@@ -11,6 +11,27 @@ import { describe } from './describe';
 
 let workerPromise: Promise<TesseractWorker> | null = null;
 
+/*
+ * The engine holds the wasm core and the 11 MB Korean model, well over
+ * 100 MB once running, and nothing ever stopped it: it stayed in Chrome's
+ * offscreen document or Firefox's background for the life of the browser
+ * after a single scan. It now stops after IDLE_MS without a scan; the next
+ * scan's overlay starts it again while the reader frames the bubble.
+ */
+const IDLE_MS = 10 * 60 * 1000;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRelease() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (pendingScans > 0 || !workerPromise) return;
+    const stopping = workerPromise;
+    workerPromise = null;
+    stopping.then((w) => w.terminate()).catch(() => {});
+  }, IDLE_MS);
+}
+
 // Scans waiting on the engine. Loading progress is only relayed while one is,
 // so a warm-up started when the overlay opens doesn't overwrite the results
 // of the previous scan still shown in the panel.
@@ -81,6 +102,7 @@ function getWorker(): Promise<TesseractWorker> {
 
 /** Starts the engine (worker, wasm core, Korean model) ahead of a scan. */
 export function warmOcr(): Promise<void> {
+  scheduleRelease();
   return getWorker().then(() => undefined);
 }
 
@@ -98,5 +120,6 @@ export async function recognizeKorean(
     return confidentText(data);
   } finally {
     pendingScans--;
+    scheduleRelease();
   }
 }
