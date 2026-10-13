@@ -4,7 +4,8 @@ import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
 import { revokedMessage } from '../../src/site';
 import { koreanSelection } from '../../src/hangul';
-import { hasSiteAccess, requestSiteAccess } from '../../src/permissions';
+import { getSettings } from '../../src/settings';
+import { hasNetflixAccess, hasSiteAccess, requestNetflixAccess, requestSiteAccess } from '../../src/permissions';
 
 type Status = 'idle' | 'activating' | 'analyzing' | 'error';
 
@@ -111,6 +112,20 @@ export function App() {
         setSiteAccess(ok);
         if (ok) void check();
       })
+      .catch(() => {});
+  };
+
+  // Firefox may allow dokhae.fr but not netflix.com: the Netflix subtitles
+  // then stay off. Only worth a word when the reader has them switched on.
+  const [netflixBlocked, setNetflixBlocked] = useState(false);
+  useEffect(() => {
+    void Promise.all([hasNetflixAccess(), getSettings()])
+      .then(([ok, s]) => setNetflixBlocked(!ok && s.netflixSubtitles))
+      .catch(() => {});
+  }, []);
+  const allowNetflix = () => {
+    requestNetflixAccess()
+      .then((ok) => setNetflixBlocked(!ok))
       .catch(() => {});
   };
 
@@ -294,6 +309,13 @@ export function App() {
             <li><span>2</span>Encadre une bulle</li>
             <li><span>3</span>Clique un mot, garde-le dans ton deck</li>
           </ol>
+
+          {netflixBlocked ? (
+            <p className="card-foot">
+              Sous-titres Netflix interactifs&nbsp;:{' '}
+              <button className="btn-link" onClick={allowNetflix}>autorise netflix.com</button>
+            </p>
+          ) : null}
 
           <p className="account" role="status">
             {checking && !access ? (

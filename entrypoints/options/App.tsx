@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type ExtensionMessage, type Settings } from '../../sr
 import { getSettings, saveSettings, hasVoiceCreds, setSiteToken, TOKEN_KEY } from '../../src/settings';
 import { fetchDecks, logoutDevice, revokedMessage, type SiteDeck } from '../../src/site';
 import { clearAccessCache } from '../../src/access';
+import { hasNetflixAccess, requestNetflixAccess } from '../../src/permissions';
 import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
 
@@ -94,6 +95,15 @@ export function App() {
     setSavedToken('');
     savedTokenRef.current = '';
     void refreshAccess(true);
+  };
+
+  // Firefox lets the reader withhold netflix.com: the subtitles then stay off.
+  const [netflixAccess, setNetflixAccess] = useState(true);
+  useEffect(() => {
+    void hasNetflixAccess().then(setNetflixAccess);
+  }, []);
+  const allowNetflix = () => {
+    requestNetflixAccess().then(setNetflixAccess).catch(() => {});
   };
 
   const connected = Boolean(access?.ok || access?.reason === 'not-subscribed');
@@ -314,6 +324,14 @@ export function App() {
             Remplace les sous-titres coréens de Netflix par la ligne analysée de Dokhae.
           </span>
         </label>
+        {settings.netflixSubtitles && !netflixAccess && (
+          <div className="notice warn-hint" role="alert">
+            <p>Ton navigateur n’autorise pas encore Dokhae sur netflix.com.</p>
+            <div className="actions">
+              <button className="btn btn-quiet" onClick={allowNetflix}>Autoriser netflix.com</button>
+            </div>
+          </div>
+        )}
         <label className="checkbox">
           <input
             type="checkbox"
