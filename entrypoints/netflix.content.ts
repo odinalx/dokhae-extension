@@ -189,6 +189,8 @@ class NetflixSubtitles {
     this.frame = 0;
     clearTimeout(this.endTimer);
     this.subtitleRoot = null;
+    // A line still waiting out its 300 ms must not be sent once the player is left.
+    this.lines.leave();
     window.removeEventListener('keydown', this.onKey, true);
     document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.overlay?.destroy();
