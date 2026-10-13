@@ -232,11 +232,68 @@ export function isRejectedCard(e: unknown): boolean {
 
 export const REJECTED_CARD_NOTICE = 'refusée par Dokhae (mot ou traduction invalide), retirée de la file';
 
-/** Send a batch of queued cards to the site; mirrors sendCardsToAnki's shape. */
+/** Cards per POST /api/cards/batch (the site's limit is 200). */
+const BATCH_MAX = 200;
+
+/**
+ * Send the queued cards to the site; mirrors sendCardsToAnki's shape.
+ *
+ * One POST /api/cards/batch per 200 cards, where "Tout envoyer" used to make
+ * one request per card. The site answers a verdict per card, in order:
+ * "added" or "exists" leave the queue, "invalid" is dropped (resending it
+ * would fail forever). A batch that fails as a whole keeps all its cards
+ * for the next try. A site without the batch route (404) gets the cards one
+ * by one, as before.
+ */
 export async function sendCardsToSite(
   token: string,
   cards: AnkiCardDraft[],
   deckId = ''
+): Promise<SiteSendResult> {
+  const addedIds: string[] = [];
+  const droppedIds: string[] = [];
+  const failures: string[] = [];
+  for (let i = 0; i < cards.length; i += BATCH_MAX) {
+    const chunk = cards.slice(i, i + BATCH_MAX);
+    let results: unknown;
+    try {
+      const body = (await request(token, '/api/cards/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          words: chunk.map((card) => ({ ...toWordInput(card), ...(deckId ? { deckId } : {}) })),
+        }),
+      })) as { results?: unknown };
+      results = body.results;
+    } catch (e) {
+      if (e instanceof SiteApiError && e.status === 404) {
+        const one = await sendCardsOneByOne(token, cards.slice(i), deckId);
+        return {
+          addedIds: [...addedIds, ...one.addedIds],
+          droppedIds: [...droppedIds, ...one.droppedIds],
+          failed: failures.length + one.failed,
+          failures: [...failures, ...one.failures],
+        };
+      }
+      const why = e instanceof Error ? e.message : String(e);
+      for (const card of chunk) failures.push(`${card.word}\u00a0: ${why}`);
+      continue;
+    }
+    chunk.forEach((card, j) => {
+      const status = Array.isArray(results) ? (results[j] as { status?: unknown } | undefined)?.status : undefined;
+      if (status === 'added' || status === 'exists') addedIds.push(card.id);
+      else if (status === 'invalid') {
+        droppedIds.push(card.id);
+        failures.push(`${card.word}\u00a0: ${REJECTED_CARD_NOTICE}`);
+      } else failures.push(`${card.word}\u00a0: réponse inattendue du site`);
+    });
+  }
+  return { addedIds, droppedIds, failed: failures.length, failures };
+}
+
+async function sendCardsOneByOne(
+  token: string,
+  cards: AnkiCardDraft[],
+  deckId: string
 ): Promise<SiteSendResult> {
   const addedIds: string[] = [];
   const droppedIds: string[] = [];
