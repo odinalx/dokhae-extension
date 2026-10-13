@@ -103,6 +103,8 @@ class NetflixSubtitles {
   private lastTitle = '';
   private lines = new LineAnalyzer(askBackground);
   private hiddenRoot: Element | null = null;
+  /** The player's subtitle layer, once found (see concernsSubtitles). */
+  private subtitleRoot: Element | null = null;
   private overlay: Overlay | null = null;
 
   private readonly onStorage = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
@@ -167,7 +169,9 @@ class NetflixSubtitles {
   private activate() {
     this.active = true;
     this.overlay = new Overlay(this);
-    this.observer = new MutationObserver(() => this.schedule());
+    this.observer = new MutationObserver((records) => {
+      if (this.concernsSubtitles(records)) this.schedule();
+    });
     this.observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     window.addEventListener('keydown', this.onKey, true);
     document.addEventListener('fullscreenchange', this.onFullscreen);
@@ -184,6 +188,7 @@ class NetflixSubtitles {
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     clearTimeout(this.endTimer);
+    this.subtitleRoot = null;
     window.removeEventListener('keydown', this.onKey, true);
     document.removeEventListener('fullscreenchange', this.onFullscreen);
     this.overlay?.destroy();
@@ -191,6 +196,30 @@ class NetflixSubtitles {
     this.unhideNative();
     this.shown = null;
     this.lastKey = '';
+  }
+
+  /**
+   * Whether a batch of mutations may have changed the subtitle on screen.
+   * The player redraws its controls, clock and progress bar many times a
+   * second; reading the subtitle layer (several selector scans of the whole
+   * document) for each of those was most of this script's cost. Once the
+   * layer is known, only changes inside it count, plus its removal or the
+   * arrival of a new one.
+   */
+  private concernsSubtitles(records: MutationRecord[]): boolean {
+    const root = this.subtitleRoot;
+    if (!root || !root.isConnected) return true;
+    for (const r of records) {
+      if (root.contains(r.target)) return true;
+      for (const node of r.addedNodes) {
+        if (node instanceof Element && (node.contains(root) || /timedtext/i.test(node.className?.toString() ?? ''))) {
+          // A new layer may replace the known one: look it up again.
+          this.subtitleRoot = null;
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /** Mutations come in bursts: read the subtitles once per frame at most. */
@@ -223,7 +252,9 @@ class NetflixSubtitles {
     const title = readEpisodeTitle(document);
     if (title) this.lastTitle = title;
 
-    const root = findSubtitleRoot(document);
+    const root =
+      this.subtitleRoot?.isConnected ? this.subtitleRoot : findSubtitleRoot(document);
+    this.subtitleRoot = root;
     const lines = root ? readSubtitleLines(root) : [];
     const key = lines.join('\n');
     if (key === this.lastKey) return;
