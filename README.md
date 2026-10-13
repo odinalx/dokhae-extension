@@ -111,7 +111,9 @@ How it is built:
 - `entrypoints/netflix.content.ts` is declared for all of
   `https://www.netflix.com/*`, because Netflix is a single-page app (going
   from the catalogue to a title loads no new page), and idles outside
-  `/watch/`. A `MutationObserver` reads the line once per frame at most.
+  `/watch/`. A `MutationObserver` reads the line once per frame at most,
+  and only for mutations of the subtitle layer (the player's clock and
+  controls change all the time).
 - Every selector lives in `src/netflix/subtitles.ts`
   (`.player-timedtext`, `.player-timedtext-text-container`,
   `[data-uia="video-title"]`, with looser fallbacks). Netflix renames its
@@ -124,11 +126,31 @@ How it is built:
   (`netflix.appContext.state.playerApp.getAPI().videoPlayer`) from
   `entrypoints/netflix-seek.content.ts`, a few lines in the page's `MAIN`
   world: setting `currentTime` directly crashes Netflix's player (M7375).
-- One analysis per distinct line, cached for the page's lifetime. The site
-  allows 120 analyses an hour per account (`hitAnalyzeLimit`), which a
-  series uses in 10 to 15 minutes. On `rate_limited` the lines show plain
-  for 3 minutes (a click on a line still asks for it); raising that budget
-  for Netflix is a site-side decision.
+- When to ask for a line is `src/netflix/lines.ts`: a line the tab knows
+  costs nothing, the background's persistent cache is asked at once, and
+  the site only once the line has stayed 300 ms on screen. The site allows
+  120 analyses an hour per account (`hitAnalyzeLimit`), which a series uses
+  in 10 to 15 minutes; `src/__tests__/netflixRequests.test.ts` counts what a
+  200-line viewing costs. Raising that budget for Netflix is a site-side
+  decision.
+
+## Requests to the site
+
+Every analysis goes through `src/analyzer.ts` in the background:
+
+- plain text (a selection, a subtitle line) is answered from a persistent
+  cache (`src/analysisCache.ts`, IndexedDB, 3000 lines, 30 days), keyed by
+  the text with spacing normalised; scans always go to the site, since the
+  server may correct their OCR text. Signing out clears it;
+- two requests for the same line at once share one call;
+- after a 429 the background backs off (2 minutes, doubling up to an hour,
+  or the site's `Retry-After`): automatic requests (Netflix lines) wait
+  without touching the network, a reader's click still goes through.
+
+`GET /api/me` is shared by concurrent checks and not forced by the popup
+for an unlocked account; `POST /api/warm` is skipped when the analyser was
+used in the last 5 minutes; "Tout envoyer" sends the queue in one
+`POST /api/cards/batch`; pronunciations are kept in memory (40).
 - Image-based subtitles (some titles draw their subtitles as pictures) have
   no text to read: Dokhae then leaves the player's line alone.
 
