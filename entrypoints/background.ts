@@ -142,14 +142,17 @@ export default defineBackground(() => {
       .catch((e) => console.warn('[Dokhae] OCR warm-up failed:', e));
     // The server's analyser too: it may have been unloaded while idle, and
     // the scan being framed is about to need it. getAccess is cached, so this
-    // costs one small request, and only for accounts that can scan.
-    getAccess()
-      .then(async (access) => {
-        if (!access.ok) return;
-        const { siteToken } = await getSettings();
-        if (siteToken) await warmOnSite(siteToken);
-      })
-      .catch((e) => console.warn('[Dokhae] analyser warm-up failed:', e));
+    // costs one small request, only for accounts that can scan, and only
+    // when the analyser has been idle long enough to be unloaded.
+    (async () => {
+      if (await analyserRecentlyUsed()) return;
+      const access = await getAccess();
+      if (!access.ok) return;
+      const { siteToken } = await getSettings();
+      if (!siteToken) return;
+      await warmOnSite(siteToken);
+      await noteAnalyserUsed();
+    })().catch((e) => console.warn('[Dokhae] analyser warm-up failed:', e));
     return undefined;
   });
 
@@ -625,11 +628,41 @@ async function analyzeText(
 
 const BACKOFF_KEY = 'analyzeBackoff';
 
+/*
+ * The site unloads its analyser after 10 quiet minutes (KIWI_IDLE_MINUTES on
+ * the site). Opening the scan overlay warmed it every time, one more request
+ * per scan; it is skipped while an analysis or a warm-up went through less
+ * than WARM_SKIP_MS ago. Kept in storage.session: Chrome restarts its service
+ * worker after 30 s of quiet, which would forget a plain variable.
+ */
+const WARM_SKIP_MS = 5 * 60 * 1000;
+const ANALYSER_USED_KEY = 'analyserUsedAt';
+
+async function analyserRecentlyUsed(): Promise<boolean> {
+  try {
+    const stored = await chrome.storage.session.get(ANALYSER_USED_KEY);
+    const at = Number(stored[ANALYSER_USED_KEY] ?? 0);
+    return Date.now() - at < WARM_SKIP_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function noteAnalyserUsed(): Promise<void> {
+  try {
+    await chrome.storage.session.set({ [ANALYSER_USED_KEY]: Date.now() });
+  } catch {
+    /* no session storage: the next scan warms again, as before */
+  }
+}
+
 const analyzer = createAnalyzer({
   cache: analysisCache(),
   async fetch(text, uncertain) {
     const { siteToken } = await getSettings();
-    return analyzeOnSite(siteToken, text, uncertain);
+    const analysis = await analyzeOnSite(siteToken, text, uncertain);
+    await noteAnalyserUsed();
+    return analysis;
   },
   async loadBackoff() {
     const stored = await chrome.storage.local.get(BACKOFF_KEY);
