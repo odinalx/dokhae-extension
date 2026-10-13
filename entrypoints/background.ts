@@ -19,7 +19,7 @@ import {
   warmOnSite,
 } from '../src/site';
 import { createQueue, withCard, withoutIds } from '../src/queue';
-import { clearAccessCache, deckLock, getAccess, lockError, lockReason, rememberAccount } from '../src/access';
+import { type AccessState, clearAccessCache, deckLock, getAccess, lockError, lockReason, rememberAccount } from '../src/access';
 import { SITE_URL } from '../src/config';
 import { prepareForOcr } from '../src/ocrPrep';
 import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
@@ -219,7 +219,12 @@ export default defineBackground(() => {
       if (message.type !== 'ACCESS_CHECK') return undefined;
 
       (async () => {
-        const state = await getAccess(message.force ?? false);
+        const state = await getAccess(message.force ?? false).catch(
+          (e): AccessState => {
+            console.warn('[Dokhae] access check failed:', e);
+            return { ok: false, reason: 'offline', checkedAt: 0 };
+          },
+        );
         sendResponse({
           type: 'ACCESS_INFO',
           ok: state.ok,
