@@ -179,7 +179,10 @@ class NetflixSubtitles {
     this.active = false;
     this.observer?.disconnect();
     this.observer = null;
+    // Reset too: a frame cancelled here but still counted would make
+    // schedule() a no-op for good once the subtitles are switched back on.
     cancelAnimationFrame(this.frame);
+    this.frame = 0;
     clearTimeout(this.endTimer);
     window.removeEventListener('keydown', this.onKey, true);
     document.removeEventListener('fullscreenchange', this.onFullscreen);
@@ -421,11 +424,16 @@ class NetflixSubtitles {
   }
 
   private async toggleAutoPause() {
-    const settings = await getSettings();
-    const next = !settings.netflixAutoPause;
-    await saveSettings({ ...settings, netflixAutoPause: next });
-    this.settings = { ...settings, netflixAutoPause: next };
-    this.overlay?.toast(next ? 'Pause à la fin de chaque réplique' : 'Pause automatique coupée');
+    try {
+      const settings = await getSettings();
+      const next = !settings.netflixAutoPause;
+      await saveSettings({ ...settings, netflixAutoPause: next });
+      this.settings = { ...settings, netflixAutoPause: next };
+      this.overlay?.toast(next ? 'Pause à la fin de chaque réplique' : 'Pause automatique coupée');
+    } catch {
+      // The extension was updated under the page: storage is gone with it.
+      this.overlay?.toast('Dokhae a été mis à jour. Actualise la page.');
+    }
   }
 
   private maybeShowHint() {
