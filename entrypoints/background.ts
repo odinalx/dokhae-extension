@@ -19,7 +19,7 @@ import {
   warmOnSite,
 } from '../src/site';
 import { createQueue, withCard, withoutIds } from '../src/queue';
-import { clearAccessCache, deckLock, getAccess, lockError, lockReason } from '../src/access';
+import { clearAccessCache, deckLock, getAccess, lockError, lockReason, rememberAccount } from '../src/access';
 import { SITE_URL } from '../src/config';
 import { prepareForOcr } from '../src/ocrPrep';
 import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
@@ -177,9 +177,9 @@ export default defineBackground(() => {
       try {
         const account = await fetchAccount(message.token);
         await setSiteToken(message.token);
-        await clearAccessCache();
-        // Warm the cache with the verdict we already have.
-        await getAccess(true);
+        // Cache the verdict this answer already gives: a second /api/me
+        // right after the first only cost a request.
+        await rememberAccount(account);
         done({ ok: true, email: account.email, subscribed: account.subscribed });
       } catch (e) {
         console.warn('[Dokhae] connect failed:', e);

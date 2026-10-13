@@ -82,8 +82,9 @@ export function App() {
     try {
       const resp = (await browser.runtime.sendMessage({
         type: 'ACCESS_CHECK',
-        // Fresh every time: someone who just paid should not wait for the cache.
-        force: true,
+        // A refusal is checked again on every open (someone who just paid
+        // should not wait for the cache); an unlocked account trusts it.
+        force: 'if-locked',
       } satisfies ExtensionMessage)) as ExtensionMessage | undefined;
       if (resp && resp.type === 'ACCESS_INFO') {
         setAccess({

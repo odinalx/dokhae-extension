@@ -1,6 +1,6 @@
 import { SITE_URL } from './config';
 import { getSettings } from './settings';
-import { fetchAccount, revokedMessage, SiteApiError } from './site';
+import { fetchAccount, revokedMessage, SiteApiError, type SiteAccount } from './site';
 
 // Access: scanning needs a valid Dokhae token on an account with a plan. There
 // is no free tier (the way in is a cheap first month), so a valid token on an
@@ -40,35 +40,37 @@ export async function clearAccessCache(): Promise<void> {
   await chrome.storage.local.remove(CACHE_KEY);
 }
 
+/**
+ * `true` always asks the site; `'if-locked'` asks only when the cached
+ * verdict is a refusal (someone who just paid must not wait out the cache,
+ * someone already unlocked costs no request); `false` trusts a fresh cache.
+ */
+export type AccessForce = boolean | 'if-locked';
+
+// One /api/me at a time per token: the popup, a scan and a Netflix line
+// asking together share the answer instead of racing to rotate the token.
+const checking = new Map<string, Promise<AccessState>>();
+
 /** Check (with caching) whether the extension is unlocked. */
-export async function getAccess(force = false): Promise<AccessState> {
+export async function getAccess(force: AccessForce = false): Promise<AccessState> {
   const settings = await getSettings();
   const token = settings.siteToken.trim();
   if (!token) return { ok: false, reason: 'no-token', checkedAt: Date.now() };
 
   const cached = await readCache();
-  if (!force && cached && Date.now() - cached.checkedAt < FRESH_MS) return cached;
+  const fresh = cached && Date.now() - cached.checkedAt < FRESH_MS;
+  if (fresh && (force === false || (force === 'if-locked' && cached.ok))) return cached;
 
+  const pending = checking.get(token);
+  if (pending) return pending;
+  const run = checkOnSite(token, cached).finally(() => checking.delete(token));
+  checking.set(token, run);
+  return run;
+}
+
+async function checkOnSite(token: string, cached: AccessState | null): Promise<AccessState> {
   try {
-    const account = await fetchAccount(token);
-    const state: AccessState = account.subscribed
-      ? {
-          ok: true,
-          email: account.email,
-          plan: account.plan,
-          subscribed: true,
-          checkedAt: Date.now(),
-        }
-      : {
-          ok: false,
-          reason: 'not-subscribed',
-          email: account.email,
-          plan: 'none',
-          subscribed: false,
-          checkedAt: Date.now(),
-        };
-    await writeCache(state);
-    return state;
+    return await rememberAccount(await fetchAccount(token));
   } catch (e) {
     if (e instanceof SiteApiError && e.status === 401) {
       const state: AccessState = {
@@ -85,6 +87,31 @@ export async function getAccess(force = false): Promise<AccessState> {
     if (cached?.ok && Date.now() - cached.checkedAt < OFFLINE_GRACE_MS) return cached;
     return { ok: false, reason: 'offline', checkedAt: cached?.checkedAt ?? 0 };
   }
+}
+
+/**
+ * Cache the verdict for an account the site just described (GET /api/me),
+ * so a caller that already has that answer does not ask again.
+ */
+export async function rememberAccount(account: SiteAccount): Promise<AccessState> {
+  const state: AccessState = account.subscribed
+    ? {
+        ok: true,
+        email: account.email,
+        plan: account.plan,
+        subscribed: true,
+        checkedAt: Date.now(),
+      }
+    : {
+        ok: false,
+        reason: 'not-subscribed',
+        email: account.email,
+        plan: 'none',
+        subscribed: false,
+        checkedAt: Date.now(),
+      };
+  await writeCache(state);
+  return state;
 }
 
 /** Human message shown in the result panel / popup when locked. */

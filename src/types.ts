@@ -1,4 +1,4 @@
-import type { AccessReason } from './access';
+import type { AccessForce, AccessReason } from './access';
 import type { AnalyzeMode } from './analyzer';
 
 export interface SelectionRect {
@@ -213,7 +213,7 @@ export interface TtsPlay {
 // Dokhae website), and on which plan? `force` bypasses the cached check.
 export interface AccessCheckRequest {
   type: 'ACCESS_CHECK';
-  force?: boolean;
+  force?: AccessForce;
 }
 export interface AccessInfo {
   type: 'ACCESS_INFO';
