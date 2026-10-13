@@ -61,11 +61,21 @@ const onMessage = (listener: DecliningListener): void =>
     listener as Parameters<typeof browser.runtime.onMessage.addListener>[0],
   );
 
+/*
+ * The tab whose panel shows the progress of the scan or selection running
+ * now. Progress used to go out with runtime.sendMessage, which reaches the
+ * extension's own pages but never a content script: the panel's progress
+ * bar had nothing to show. It goes to the tab now, and the offscreen
+ * document's OCR progress is relayed there too.
+ */
+let progressTab: number | null = null;
+
 // Push a status line to the result panel (and the background console).
 function report(status: string, progress: number) {
   console.log(`[Dokhae] ${status} (${Math.round(progress * 100)}%)`);
-  chrome.runtime
-    .sendMessage({ type: 'OCR_PROGRESS', status, progress } satisfies ExtensionMessage)
+  if (progressTab == null) return;
+  chrome.tabs
+    .sendMessage(progressTab, { type: 'OCR_PROGRESS', status, progress } satisfies ExtensionMessage)
     .catch(() => {});
 }
 
@@ -156,6 +166,14 @@ export default defineBackground(() => {
     return undefined;
   });
 
+  // --- OCR progress from the offscreen document (Chrome): on to the panel ---
+  onMessage((msg: unknown, sender): true | undefined => {
+    const message = msg as ExtensionMessage;
+    if (message.type !== 'OCR_PROGRESS' || sender.tab) return undefined;
+    report(message.status, message.progress);
+    return undefined;
+  });
+
   // --- One-click connect: the site's /connect-extension page hands a token ---
   // Only the connect content script sends this, and only from that page; the
   // sender check keeps any other page (or content script) from swapping the
@@ -231,6 +249,7 @@ export default defineBackground(() => {
 
           const windowId = sender.tab?.windowId;
           if (windowId == null) throw new Error("Impossible de trouver la fenêtre active.");
+          progressTab = sender.tab?.id ?? null;
 
           // --- Capture ---
           report('capture de l\'écran', 0.1);
@@ -270,8 +289,10 @@ export default defineBackground(() => {
           report('analyse des mots', 0.8);
           const analysis = await analyzeText(ocr.text, ocr.uncertain);
 
+          progressTab = null;
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
         } catch (e) {
+          progressTab = null;
           console.error('[Dokhae] capture pipeline failed:', e);
           sendResponse({
             type: 'CAPTURE_ERROR', message: describe(e), reason: lockReason(e),
@@ -285,7 +306,7 @@ export default defineBackground(() => {
 
   // --- Analyze selected text: same pipeline as a scan, minus capture/OCR ---
   onMessage(
-    (msg: unknown, _sender, sendResponse): true | undefined => {
+    (msg: unknown, sender, sendResponse): true | undefined => {
       const message = msg as ExtensionMessage;
       if (message.type !== 'ANALYZE_TEXT') return undefined;
 
@@ -296,11 +317,16 @@ export default defineBackground(() => {
           if (!access.ok) throw lockError(access);
 
           const mode = message.mode ?? 'user';
-          if (mode === 'user') report('analyse des mots', 0.8);
+          if (mode === 'user') {
+            progressTab = sender.tab?.id ?? null;
+            report('analyse des mots', 0.8);
+          }
           const analysis = await analyzeText(message.text, undefined, mode);
+          if (mode === 'user') progressTab = null;
 
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
         } catch (e) {
+          if ((message.mode ?? 'user') === 'user') progressTab = null;
           if (!(e instanceof CacheMissError || e instanceof BackingOffError)) {
             console.error('[Dokhae] analyze-text pipeline failed:', e);
           }

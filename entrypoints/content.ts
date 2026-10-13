@@ -12,6 +12,9 @@ import {
 } from '../src/panel';
 
 let scanActive = false;
+// Scans or analyses waiting on the background: progress only counts then,
+// so a late report never replaces results already shown.
+let working = 0;
 
 // The panel as a scan opens it: "Scanner une autre bulle" at the bottom, and
 // Escape left to the overlay while a new frame is being drawn.
@@ -41,7 +44,7 @@ export default defineContentScript({
         activateScan();
       } else if (message.type === 'ANALYZE_SELECTION') {
         runAnalyzeText(message.text);
-      } else if (message.type === 'OCR_PROGRESS') {
+      } else if (message.type === 'OCR_PROGRESS' && working > 0) {
         const panel = openPanel();
         if (panel) setPanelProgress(panel, message.status, message.progress);
       }
@@ -173,6 +176,7 @@ async function runCapture(rect: SelectionRect) {
   const panel = createPanel();
   setPanelStatus(panel, 'Capture en cours…');
 
+  working++;
   try {
     const resp = (await browser.runtime.sendMessage({
       type: 'CAPTURE_REQUEST',
@@ -194,6 +198,8 @@ async function runCapture(rect: SelectionRect) {
     } else {
       setPanelError(panel, msg, () => runCapture(rect));
     }
+  } finally {
+    working--;
   }
 }
 
@@ -215,6 +221,7 @@ async function runAnalyzeText(text: string) {
   setPanelStatus(panel, 'Analyse en cours…');
 
   const retry = () => runAnalyzeText(clean);
+  working++;
   try {
     const resp = (await browser.runtime.sendMessage({
       type: 'ANALYZE_TEXT',
@@ -236,5 +243,7 @@ async function runAnalyzeText(text: string) {
     } else {
       setPanelError(panel, msg, retry);
     }
+  } finally {
+    working--;
   }
 }
