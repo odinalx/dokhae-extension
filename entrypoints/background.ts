@@ -707,7 +707,23 @@ const analyzer = createAnalyzer({
 //   1. Naver dictionary pronunciation (free, natural) — single dictionary words
 //   2. Clova Voice (paid, if keys configured)
 //   3. Google TTS (free, simple) — always works as a fallback
+// Audio already fetched, by text: replaying a word (the speaker button is
+// pressed again and again while learning it) cost one or two requests each
+// time. Small and in memory: the background's life is enough.
+const ttsCache = new Map<string, string>();
+const TTS_CACHE_MAX = 40;
+
 async function resolveTtsAudio(text: string, settings: Settings): Promise<string> {
+  const key = `${hasVoiceCreds(settings) ? settings.voiceSpeaker : ''}|${text.trim()}`;
+  const known = ttsCache.get(key);
+  if (known) return known;
+  const audio = await fetchTtsAudio(text, settings);
+  if (ttsCache.size >= TTS_CACHE_MAX) ttsCache.delete(ttsCache.keys().next().value!);
+  ttsCache.set(key, audio);
+  return audio;
+}
+
+async function fetchTtsAudio(text: string, settings: Settings): Promise<string> {
   const word = text.trim();
 
   if (!/\s/.test(word)) {
