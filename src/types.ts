@@ -99,6 +99,8 @@ export interface CaptureError {
   message: string;
   /** Set when the reader can fix it: the panel then offers the right button. */
   reason?: AccessReason;
+  /** The site's error code when it answered one ("rate_limited", …). */
+  code?: string;
 }
 
 // background -> content script (activate the drag overlay)

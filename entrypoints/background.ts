@@ -297,6 +297,9 @@ export default defineBackground(() => {
           console.error('[Dokhae] analyze-text pipeline failed:', e);
           sendResponse({
             type: 'CAPTURE_ERROR', message: describe(e), reason: lockReason(e),
+            // The Netflix subtitles back off on "rate_limited" instead of
+            // asking again on every line.
+            ...(e instanceof SiteApiError ? { code: e.code } : {}),
           } satisfies ExtensionMessage);
         }
       })();
