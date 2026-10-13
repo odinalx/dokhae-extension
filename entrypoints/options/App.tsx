@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SETTINGS, type ExtensionMessage, type Settings } from '../../src/types';
 import { getSettings, saveSettings, hasVoiceCreds, setSiteToken, TOKEN_KEY } from '../../src/settings';
+import { analysisCache } from '../../src/analysisCache';
 import { fetchDecks, logoutDevice, revokedMessage, type SiteDeck } from '../../src/site';
 import { clearAccessCache } from '../../src/access';
 import { hasNetflixAccess, requestNetflixAccess } from '../../src/permissions';
@@ -91,6 +92,8 @@ export function App() {
     if (token) await logoutDevice(token).catch(() => {});
     await setSiteToken('');
     await clearAccessCache();
+    // The lines read on this browser stay on it: signing out forgets them.
+    await analysisCache().clear();
     setSettings((s) => ({ ...s, siteToken: '' }));
     setSavedToken('');
     savedTokenRef.current = '';

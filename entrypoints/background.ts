@@ -27,6 +27,9 @@ import type { Settings } from '../src/types';
 import { describe } from '../src/describe';
 import { getEngine } from '../src/engine';
 import { hasSiteAccess } from '../src/permissions';
+import { analysisCache } from '../src/analysisCache';
+import { BackingOffError, CacheMissError, createAnalyzer, type AnalyzeMode } from '../src/analyzer';
+import { NO_BACKOFF, type BackoffState } from '../src/backoff';
 
 const CAPTURE_TIMEOUT_MS = 15_000;
 // Starting the engine (up to 15 s the first time) plus reading with the best
@@ -289,17 +292,24 @@ export default defineBackground(() => {
           const access = await getAccess();
           if (!access.ok) throw lockError(access);
 
-          report('analyse des mots', 0.8);
-          const analysis = await analyzeText(message.text);
+          const mode = message.mode ?? 'user';
+          if (mode !== 'cache') report('analyse des mots', 0.8);
+          const analysis = await analyzeText(message.text, undefined, mode);
 
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
         } catch (e) {
-          console.error('[Dokhae] analyze-text pipeline failed:', e);
+          if (!(e instanceof CacheMissError || e instanceof BackingOffError)) {
+            console.error('[Dokhae] analyze-text pipeline failed:', e);
+          }
+          const retryAt = (e as { retryAt?: unknown }).retryAt;
           sendResponse({
             type: 'CAPTURE_ERROR', message: describe(e), reason: lockReason(e),
             // The Netflix subtitles back off on "rate_limited" instead of
-            // asking again on every line.
-            ...(e instanceof SiteApiError ? { code: e.code } : {}),
+            // asking again on every line, and skip a "cache_miss".
+            ...(e instanceof SiteApiError || e instanceof CacheMissError || e instanceof BackingOffError
+              ? { code: e.code }
+              : {}),
+            ...(typeof retryAt === 'number' ? { retryAt } : {}),
           } satisfies ExtensionMessage);
         }
       })();
@@ -567,8 +577,8 @@ async function tesseractOcr(
  * This used to run entirely in-page: Kiwi's wasm in a sandboxed iframe (its
  * Emscripten glue needs `unsafe-eval`, which only a sandboxed page's CSP may
  * grant) driven from the offscreen document, with the model bytes transferred
- * in over postMessage. All of that — and the ~84 MB model shipped inside every
- * install — is now one HTTP call, shared with the mobile app.
+ * in over postMessage. All of that, and the ~84 MB model shipped inside every
+ * install, is now one HTTP call, shared with the mobile app.
  *
  * OCR stays local: it's free, works offline, and Tesseract handles the crisp
  * rendered text of a webtoon panel well.
@@ -577,21 +587,29 @@ async function tesseractOcr(
  * text may hold look-alikes of syllables the model cannot print, and which
  * syllables were read with low confidence. Selected page text sends none.
  *
+ * The call goes through `analyzer` (src/analyzer.ts): cache, shared
+ * in-flight requests, back-off after a 429.
+ *
  * Empty text short-circuits. An error the site answered (or a network
  * failure) is rethrown with its French message; anything else degrades to
  * showing the recognised text with no analysis.
  */
-async function analyzeText(raw: string, uncertain?: number[]): Promise<AnalysisResult> {
+async function analyzeText(
+  raw: string,
+  uncertain?: number[],
+  mode: AnalyzeMode = 'user',
+): Promise<AnalysisResult> {
   const empty = { text: '', sentenceTranslation: '', tone: '', words: [] };
   if (!raw?.trim()) return empty;
 
   const { siteToken } = await getSettings();
   if (!siteToken) return { ...empty, text: raw };
 
-  report('traduction', 0.85);
+  if (mode !== 'cache') report('traduction', 0.85);
   try {
-    return await analyzeOnSite(siteToken, raw, uncertain);
+    return await analyzer.analyze(raw, { mode, uncertain });
   } catch (e) {
+    if (e instanceof CacheMissError || e instanceof BackingOffError) throw e;
     console.error('[Dokhae] analysis failed:', e);
     // The site said no (expired plan, rate limit, revoked token, unreachable):
     // show its French message instead of a silent, unanalysed result.
@@ -604,6 +622,23 @@ async function analyzeText(raw: string, uncertain?: number[]): Promise<AnalysisR
     return { ...empty, text: raw };
   }
 }
+
+const BACKOFF_KEY = 'analyzeBackoff';
+
+const analyzer = createAnalyzer({
+  cache: analysisCache(),
+  async fetch(text, uncertain) {
+    const { siteToken } = await getSettings();
+    return analyzeOnSite(siteToken, text, uncertain);
+  },
+  async loadBackoff() {
+    const stored = await chrome.storage.local.get(BACKOFF_KEY);
+    return (stored[BACKOFF_KEY] as BackoffState | undefined) ?? NO_BACKOFF;
+  },
+  async saveBackoff(state) {
+    await chrome.storage.local.set({ [BACKOFF_KEY]: state });
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Text-to-speech

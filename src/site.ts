@@ -1,3 +1,4 @@
+import { parseRetryAfter } from './backoff';
 import { SITE_URL } from './config';
 import { TOKEN_RE } from './connect';
 import { romanize } from './romanize';
@@ -23,7 +24,9 @@ export class SiteApiError extends Error {
     readonly status: number,
     readonly code: string,
     /** For `device_revoked`: why ("reuse", "replaced", "user", …). */
-    readonly detail?: string
+    readonly detail?: string,
+    /** For `rate_limited`: the wait the site asked for (Retry-After), when it said. */
+    readonly retryAfterMs?: number
   ) {
     super(message);
   }
@@ -47,7 +50,7 @@ export function revokedMessage(reason: string | undefined): string {
 
 const FRENCH_ERRORS: Record<string, string> = {
   subscription_required: `Scanner fait partie de l'abonnement Dokhae. Pour un nouveau compte, le premier mois est à 2,99\u00a0€.`,
-  rate_limited: 'Trop de scans d\'un coup. Réessaie dans un moment.',
+  rate_limited: 'Trop d’analyses d’un coup. Réessaie dans quelques minutes.',
   http_401: `Ton accès à Dokhae a expiré ou a été révoqué. Reconnecte ton compte.`,
 };
 
@@ -75,6 +78,12 @@ async function request(token: string, path: string, init?: RequestInit): Promise
     }
     // The API speaks English (it also serves the app); the codes the reader
     // can act on get French wording here.
+    if (res.status === 429 || code === 'rate_limited') {
+      throw new SiteApiError(
+        FRENCH_ERRORS.rate_limited!, res.status, 'rate_limited', undefined,
+        parseRetryAfter(res.headers.get('Retry-After')),
+      );
+    }
     const french = FRENCH_ERRORS[res.status === 401 ? 'http_401' : code];
     const message =
       french ? french
