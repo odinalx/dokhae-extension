@@ -28,6 +28,10 @@ export interface Settings {
   ankiConnectUrl: string; // e.g. "http://127.0.0.1:8765"
   ankiDeck: string;       // target deck name
   ankiAutoSend: boolean;  // push each card to Anki immediately instead of queueing
+  // Netflix: Korean subtitles redrawn as clickable, analysed words.
+  netflixSubtitles: boolean;
+  // Netflix: pause the video when each subtitle line ends.
+  netflixAutoPause: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ankiConnectUrl: 'http://127.0.0.1:8765',
   ankiDeck: 'Dokhae',
   ankiAutoSend: false,
+  netflixSubtitles: true,
+  netflixAutoPause: false,
 };
 
 // One Anki card waiting in the session queue (or being sent directly).

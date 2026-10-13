@@ -290,6 +290,44 @@ export function App() {
         </section>
       )}
 
+      <section aria-labelledby="netflix-title">
+        <div className="sec-head">
+          <h2 id="netflix-title">Netflix</h2>
+          <span className={settings.netflixSubtitles ? 'badge on' : 'badge'}>
+            {settings.netflixSubtitles ? 'activé' : 'désactivé'}
+          </span>
+        </div>
+        <p className="hint">
+          Sur netflix.com, avec les sous-titres coréens affichés, Dokhae redessine chaque
+          réplique mot à mot. Clique un mot pour sa fiche, la vidéo se met en pause.
+          Raccourcis pendant la lecture{NB}: <kbd>A</kbd> réplique précédente, <kbd>R</kbd>{' '}
+          rejouer la réplique, <kbd>T</kbd> traduction, <kbd>P</kbd> pause automatique.
+        </p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.netflixSubtitles}
+            onChange={(e) => update({ netflixSubtitles: e.target.checked })}
+          />
+          <span>
+            <strong>Sous-titres Netflix interactifs</strong><br />
+            Remplace les sous-titres coréens de Netflix par la ligne analysée de Dokhae.
+          </span>
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.netflixAutoPause}
+            onChange={(e) => update({ netflixAutoPause: e.target.checked })}
+            disabled={!settings.netflixSubtitles}
+          />
+          <span>
+            <strong>Pause à la fin de chaque réplique</strong><br />
+            Le temps de lire avant la suite. <kbd>P</kbd> l’active ou la coupe pendant la lecture.
+          </span>
+        </label>
+      </section>
+
       {SHOW_NAVER_CLOUD && (<>
       <section>
         <div className="sec-head">
