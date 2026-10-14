@@ -4,6 +4,7 @@ import { TOKEN_RE } from './connect';
 import { romanize } from './romanize';
 import { liveToken, rotateSiteToken } from './settings';
 import type { AnalysisResult, AnkiCardDraft } from './types';
+import { freeLimitMessage } from './freeLimit';
 
 // Client for the Dokhae website's extension API (see the site's src/routes/api).
 // Auth is this device's bearer token ("sori_…"), handed over by the site's
@@ -14,6 +15,9 @@ export interface SiteAccount {
   name: string;
   plan: string;
   subscribed: boolean;
+  /** Without a plan: analyses left today, and the daily allowance. */
+  freeLeft: number;
+  freePerDay: number;
 }
 
 // Error carrying the HTTP status + the site's machine-readable `error` code
@@ -50,6 +54,7 @@ export function revokedMessage(reason: string | undefined): string {
 
 const FRENCH_ERRORS: Record<string, string> = {
   subscription_required: `Scanner fait partie de l'abonnement Dokhae. Pour un nouveau compte, le premier mois est à 2,99\u00a0€.`,
+  free_limit_reached: freeLimitMessage(),
   rate_limited: 'Trop d’analyses d’un coup. Réessaie dans quelques minutes.',
   http_401: `Ton accès à Dokhae a expiré ou a été révoqué. Reconnecte ton compte.`,
 };
@@ -111,8 +116,13 @@ export async function fetchAccount(token: string): Promise<SiteAccount> {
     name: String(body.name ?? ''),
     plan: String(body.plan ?? 'none'),
     subscribed: Boolean(body.subscribed),
+    freeLeft: count((body as { freeAnalysesLeft?: unknown }).freeAnalysesLeft, 0),
+    freePerDay: count((body as { freeAnalysesPerDay?: unknown }).freeAnalysesPerDay, 5),
   };
 }
+
+const count = (v: unknown, fallback: number) =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fallback;
 
 /**
  * POST /api/analyze — Korean text in, analysed words out.
@@ -129,7 +139,9 @@ export async function fetchAccount(token: string): Promise<SiteAccount> {
 export async function analyzeOnSite(
   token: string,
   text: string,
-  uncertain?: number[]
+  uncertain?: number[],
+  line = false,
+  onFreeLeft?: (left: number) => void,
 ): Promise<AnalysisResult> {
   const body = (await request(token, '/api/analyze', {
     method: 'POST',
@@ -137,14 +149,32 @@ export async function analyzeOnSite(
     // notes come back in French. The API defaults to English for the app.
     // `uncertain` (OCR scans only) turns on the server's repair of syllables
     // Tesseract's model cannot print; `text` then comes back corrected.
-    body: JSON.stringify(uncertain ? { text, lang: 'fr', uncertain } : { text, lang: 'fr' }),
-  })) as Partial<AnalysisResult>;
+    // `kind: "line"` marks a video subtitle: a free account's lines do not
+    // spend its daily analyses, opening a word does (spendFreeWord).
+    body: JSON.stringify({
+      text,
+      lang: 'fr',
+      ...(uncertain ? { uncertain } : {}),
+      ...(line ? { kind: 'line' } : {}),
+    }),
+  })) as Partial<AnalysisResult> & { freeLeft?: unknown };
+  if (typeof body.freeLeft === 'number') onFreeLeft?.(body.freeLeft);
   return {
     text: String(body.text ?? ''),
     sentenceTranslation: String(body.sentenceTranslation ?? ''),
     tone: String(body.tone ?? ''),
     words: Array.isArray(body.words) ? body.words : [],
   };
+}
+
+/**
+ * POST /api/free/word: a free account opens a word under a video, which
+ * spends one of its daily analyses. `left` is null for a subscriber (never
+ * counted); a spent allowance throws free_limit_reached.
+ */
+export async function spendFreeWord(token: string): Promise<number | null> {
+  const body = (await request(token, '/api/free/word', { method: 'POST', body: '{}' })) as { left?: unknown };
+  return typeof body.left === 'number' ? body.left : null;
 }
 
 /**
