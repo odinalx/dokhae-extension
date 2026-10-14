@@ -66,7 +66,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'Dokhae',
     description: "Lis tes webtoons en coréen\u00a0: capture une bulle, comprends chaque mot, garde-les dans ton deck Dokhae.",
-    version: '1.4.0',
+    version: '1.5.0',
     homepage_url: siteOrigin(),
     ...(browser === 'firefox'
       ? {
