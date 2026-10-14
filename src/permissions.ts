@@ -5,9 +5,10 @@
  * the audio, even the connect script on dokhae.fr. So Firefox asks, from a
  * click (the only moment a permission prompt may open).
  *
- * Content scripts count too: on Firefox the Netflix subtitles only run once
- * www.netflix.com is allowed. That one is a feature, not a requirement, so it
- * is checked apart and never blocks the rest of the extension.
+ * Content scripts count too: on Firefox the Netflix and YouTube subtitles only
+ * run once www.netflix.com and www.youtube.com are allowed. Those are
+ * features, not requirements, so they are checked apart and never block the
+ * rest of the extension.
  */
 
 type ManifestLike = {
@@ -21,7 +22,7 @@ export function neededOrigins(): string[] {
 }
 
 /**
- * Origins only a content script asks for (Netflix today), as host patterns
+ * Origins only a content script asks for (Netflix and YouTube), as host patterns
  * ("https://www.netflix.com/*"). Those already covered by a host permission
  * (the connect page on the site) are left out.
  */
@@ -57,20 +58,20 @@ export function hasSiteAccess(): Promise<boolean> {
   return contains(neededOrigins());
 }
 
-/** Whether the Netflix subtitles may run (always true on Chrome). */
-export function hasNetflixAccess(): Promise<boolean> {
+/** Whether the video subtitles may run on every video site (always true on Chrome). */
+export function hasVideoAccess(): Promise<boolean> {
   return contains(featureOrigins());
 }
 
 /**
  * Opens the browser's prompt; call it straight from a click handler. Asks for
- * Netflix in the same prompt, so a new reader answers once.
+ * the video sites in the same prompt, so a new reader answers once.
  */
 export function requestSiteAccess(): Promise<boolean> {
   return browser.permissions.request({ origins: [...neededOrigins(), ...featureOrigins()] });
 }
 
-/** Opens the browser's prompt for Netflix alone; call it from a click handler. */
-export function requestNetflixAccess(): Promise<boolean> {
+/** Opens the browser's prompt for the video sites alone; call it from a click handler. */
+export function requestVideoAccess(): Promise<boolean> {
   return browser.permissions.request({ origins: featureOrigins() });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CueHistory } from '../netflix/cues';
+import { CueHistory } from '../video/cues';
 
 const starts = (h: CueHistory) => h.all().map((c) => [c.text, c.start]);
 

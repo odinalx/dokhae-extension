@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAnalysisCache, memoryStore, type CacheStore } from '../analysisCache';
 import { BackingOffError, CacheMissError, createAnalyzer } from '../analyzer';
 import { NO_BACKOFF, type BackoffState } from '../backoff';
-import { LineAnalyzer, type Outcome, type Send } from '../netflix/lines';
+import { LineAnalyzer, type Outcome, type Send } from '../video/lines';
 import type { AnalysisResult } from '../types';
 
 /*

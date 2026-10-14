@@ -28,13 +28,15 @@ Before uploading, check `.output/chrome-mv3/manifest.json` (and the same in
 - `name` Dokhae, `version` bumped (the store refuses a version it has seen),
 - `host_permissions` ends with `https://dokhae.fr/*` and holds no
   `localhost:3000` and no `<all_urls>`,
-- `content_scripts` has only `https://dokhae.fr/connect-extension*` and the
+- `content_scripts` has only `https://dokhae.fr/connect-extension*`, the
   two Netflix scripts on `https://www.netflix.com/*` (`netflix.js`, and
-  `netflix-seek.js` in the `MAIN` world).
+  `netflix-seek.js` in the `MAIN` world) and the YouTube script on
+  `https://www.youtube.com/*` (`youtube.js`).
 
-The Netflix scripts widen the permissions: on the update that brings them,
-Chrome disables the installed extension until the reader accepts
-"www.netflix.com", and the store may review it by hand. The justification
+The video scripts widen the permissions: on the update that brings them
+(Netflix in 1.4.0, YouTube in 1.5.0), Chrome disables the installed
+extension until the reader accepts the new site, and the store may review
+it by hand. The justification
 is in the listings; repeat it in the notes to the reviewer.
 
 For an update, bump `version` in both `wxt.config.ts` and `package.json`.

@@ -5,7 +5,7 @@ import { CONNECT_PATH } from '../../src/connect';
 import { revokedMessage } from '../../src/site';
 import { koreanSelection } from '../../src/hangul';
 import { getSettings } from '../../src/settings';
-import { hasNetflixAccess, hasSiteAccess, requestNetflixAccess, requestSiteAccess } from '../../src/permissions';
+import { hasSiteAccess, hasVideoAccess, requestSiteAccess, requestVideoAccess } from '../../src/permissions';
 
 type Status = 'idle' | 'activating' | 'analyzing' | 'error';
 
@@ -116,17 +116,18 @@ export function App() {
       .catch(() => {});
   };
 
-  // Firefox may allow dokhae.fr but not netflix.com: the Netflix subtitles
-  // then stay off. Only worth a word when the reader has them switched on.
-  const [netflixBlocked, setNetflixBlocked] = useState(false);
+  // Firefox may allow dokhae.fr but not netflix.com or youtube.com: the
+  // video subtitles then stay off. Only worth a word when the reader has
+  // them switched on.
+  const [videoBlocked, setVideoBlocked] = useState(false);
   useEffect(() => {
-    void Promise.all([hasNetflixAccess(), getSettings()])
-      .then(([ok, s]) => setNetflixBlocked(!ok && s.netflixSubtitles))
+    void Promise.all([hasVideoAccess(), getSettings()])
+      .then(([ok, s]) => setVideoBlocked(!ok && (s.netflixSubtitles || s.youtubeSubtitles)))
       .catch(() => {});
   }, []);
-  const allowNetflix = () => {
-    requestNetflixAccess()
-      .then((ok) => setNetflixBlocked(!ok))
+  const allowVideo = () => {
+    requestVideoAccess()
+      .then((ok) => setVideoBlocked(!ok))
       .catch(() => {});
   };
 
@@ -311,10 +312,10 @@ export function App() {
             <li><span>3</span>Clique un mot, garde-le dans ton deck</li>
           </ol>
 
-          {netflixBlocked ? (
+          {videoBlocked ? (
             <p className="card-foot">
-              Sous-titres Netflix interactifs&nbsp;:{' '}
-              <button className="btn-link" onClick={allowNetflix}>autorise netflix.com</button>
+              Sous-titres Netflix et YouTube interactifs&nbsp;:{' '}
+              <button className="btn-link" onClick={allowVideo}>autorise ces sites</button>
             </p>
           ) : null}
 

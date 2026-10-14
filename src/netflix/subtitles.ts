@@ -58,10 +58,7 @@ export function readSubtitleLines(root: Element): string[] {
     .filter(Boolean);
 }
 
-/** One string for the API and the card: the lines joined by a space. */
-export function subtitleText(lines: string[]): string {
-  return lines.join(' ');
-}
+export { subtitleText } from '../video/text';
 
 /** The elements of a match list that no other one contains, in document order. */
 function outermost(found: Element[]): Element[] {

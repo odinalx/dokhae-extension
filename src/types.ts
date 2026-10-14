@@ -33,6 +33,10 @@ export interface Settings {
   netflixSubtitles: boolean;
   // Netflix: pause the video when each subtitle line ends.
   netflixAutoPause: boolean;
+  // YouTube: Korean captions redrawn as clickable, analysed words.
+  youtubeSubtitles: boolean;
+  // YouTube: pause the video when each caption line ends.
+  youtubeAutoPause: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,6 +51,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ankiAutoSend: false,
   netflixSubtitles: true,
   netflixAutoPause: false,
+  youtubeSubtitles: true,
+  youtubeAutoPause: false,
 };
 
 // One Anki card waiting in the session queue (or being sent directly).
