@@ -19,6 +19,13 @@ interface AccessView {
   revokedReason?: string;
 }
 
+/** The video sites after Netflix and YouTube, which share one settings section. */
+const MORE_VIDEO_SITES = [
+  { name: 'Viki', on: 'vikiSubtitles', pause: 'vikiAutoPause' },
+  { name: 'Disney+', on: 'disneySubtitles', pause: 'disneyAutoPause' },
+  { name: 'Prime Video', on: 'primeSubtitles', pause: 'primeAutoPause' },
+] as const;
+
 const PLAN_NAMES: Record<string, string> = {
   monthly: 'mensuel',
   yearly: 'annuel',
@@ -104,7 +111,7 @@ export function App() {
     void refreshAccess(true);
   };
 
-  // Firefox lets the reader withhold netflix.com and youtube.com: the
+  // Firefox lets the reader withhold the video sites: the
   // subtitles then stay off.
   const [videoAccess, setVideoAccess] = useState(true);
   useEffect(() => {
@@ -343,7 +350,7 @@ export function App() {
           <div className="notice warn-hint" role="alert">
             <p>Ton navigateur n’autorise pas encore Dokhae sur netflix.com.</p>
             <div className="actions">
-              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser netflix.com et youtube.com</button>
+              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser les sites vidéo</button>
             </div>
           </div>
         )}
@@ -388,7 +395,7 @@ export function App() {
           <div className="notice warn-hint" role="alert">
             <p>Ton navigateur n’autorise pas encore Dokhae sur youtube.com.</p>
             <div className="actions">
-              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser netflix.com et youtube.com</button>
+              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser les sites vidéo</button>
             </div>
           </div>
         )}
@@ -405,6 +412,51 @@ export function App() {
             la pause attend qu’ils s’effacent.
           </span>
         </label>
+      </section>
+
+      <section aria-labelledby="more-video-title">
+        <div className="sec-head">
+          <h2 id="more-video-title">Viki, Disney+, Prime Video</h2>
+        </div>
+        <p className="hint">
+          Les mêmes sous-titres à cliquer, avec les mêmes raccourcis, sur viki.com,
+          disneyplus.com et Prime Video (primevideo.com, et les vidéos d’amazon.fr et
+          amazon.com). Choisis les sous-titres coréens dans le lecteur.
+        </p>
+        {MORE_VIDEO_SITES.map((site) => (
+          <div key={site.on} className="site-group">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={settings[site.on]}
+                onChange={(e) => update({ [site.on]: e.target.checked })}
+              />
+              <span>
+                <strong>Sous-titres {site.name} interactifs</strong><br />
+                Remplace les sous-titres coréens de {site.name} par la ligne analysée de Dokhae.
+              </span>
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={settings[site.pause]}
+                onChange={(e) => update({ [site.pause]: e.target.checked })}
+                disabled={!settings[site.on]}
+              />
+              <span>
+                <strong>Pause à la fin de chaque réplique</strong> sur {site.name}
+              </span>
+            </label>
+          </div>
+        ))}
+        {MORE_VIDEO_SITES.some((site) => settings[site.on]) && !videoAccess && (
+          <div className="notice warn-hint" role="alert">
+            <p>Ton navigateur n’autorise pas encore Dokhae sur ces sites.</p>
+            <div className="actions">
+              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser les sites vidéo</button>
+            </div>
+          </div>
+        )}
       </section>
 
       {SHOW_NAVER_CLOUD && (<>

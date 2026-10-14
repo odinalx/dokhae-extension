@@ -33,8 +33,8 @@ function Grant() {
         <h1 className="card-title">Une autorisation avant de commencer</h1>
         <p className="card-text">
           Dokhae a besoin de contacter dokhae.fr (ton compte et l’analyse des mots) et les
-          dictionnaires de prononciation, et de lire les sous-titres sur netflix.com et
-          youtube.com pour les rendre interactifs. Ton navigateur te demande ton accord une seule fois.
+          dictionnaires de prononciation, et de lire les sous-titres sur Netflix, YouTube,
+          Viki, Disney+ et Prime Video pour les rendre interactifs. Ton navigateur te demande ton accord une seule fois.
         </p>
         <button className="btn btn-primary" onClick={allow}>
           Autoriser et connecter mon compte

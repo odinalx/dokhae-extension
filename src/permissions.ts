@@ -5,8 +5,8 @@
  * the audio, even the connect script on dokhae.fr. So Firefox asks, from a
  * click (the only moment a permission prompt may open).
  *
- * Content scripts count too: on Firefox the Netflix and YouTube subtitles only
- * run once www.netflix.com and www.youtube.com are allowed. Those are
+ * Content scripts count too: on Firefox the video subtitles (Netflix,
+ * YouTube, Viki, Disney+, Prime Video) only run once those sites are allowed. Those are
  * features, not requirements, so they are checked apart and never block the
  * rest of the extension.
  */

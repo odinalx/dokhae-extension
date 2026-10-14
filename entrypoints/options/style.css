@@ -121,6 +121,7 @@ label.checkbox {
   cursor: pointer; transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 label.checkbox:hover { background: var(--wkr-surface); }
+.site-group { display: flex; flex-direction: column; gap: 6px; }
 label.checkbox:has(input:checked) { border-color: var(--wkr-accent); background: var(--wkr-accent-soft); }
 label.checkbox > span { color: var(--wkr-muted); }
 label.checkbox strong { color: var(--wkr-text); }
