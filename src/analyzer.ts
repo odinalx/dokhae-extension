@@ -27,7 +27,7 @@ export type AnalyzeMode = 'cache' | 'auto' | 'user';
 export interface AnalyzerDeps {
   cache: AnalysisCache;
   /** The site call. Throws an error with `code: 'rate_limited'` on a 429. */
-  fetch(text: string, uncertain?: number[]): Promise<AnalysisResult>;
+  fetch(text: string, uncertain?: number[], line?: boolean): Promise<AnalysisResult>;
   loadBackoff(): Promise<BackoffState>;
   saveBackoff(state: BackoffState): Promise<void>;
   now?: () => number;
@@ -50,7 +50,8 @@ export class BackingOffError extends Error {
 }
 
 export interface Analyzer {
-  analyze(text: string, opts?: { mode?: AnalyzeMode; uncertain?: number[] }): Promise<AnalysisResult>;
+  /** `line`: a video subtitle (free for a free account, see src/site.ts). */
+  analyze(text: string, opts?: { mode?: AnalyzeMode; uncertain?: number[]; line?: boolean }): Promise<AnalysisResult>;
   /** When automatic requests may resume (0 when they may now). */
   retryAt(): Promise<number>;
 }
@@ -59,9 +60,9 @@ export function createAnalyzer(deps: AnalyzerDeps): Analyzer {
   const now = deps.now ?? Date.now;
   const inflight = new Map<string, Promise<AnalysisResult>>();
 
-  async function call(key: string, text: string, uncertain?: number[]): Promise<AnalysisResult> {
+  async function call(key: string, text: string, uncertain?: number[], line?: boolean): Promise<AnalysisResult> {
     try {
-      const analysis = await deps.fetch(text, uncertain);
+      const analysis = await deps.fetch(text, uncertain, line);
       // A scan's text may come back corrected: only plain text is reusable.
       if (!uncertain) await deps.cache.put(text, analysis);
       const backoff = await deps.loadBackoff();
@@ -102,7 +103,7 @@ export function createAnalyzer(deps: AnalyzerDeps): Analyzer {
       // Checked again: the awaits above let a twin request start meanwhile.
       const twin = inflight.get(key);
       if (twin) return twin;
-      const request = call(key, text, uncertain);
+      const request = call(key, text, uncertain, opts.line);
       inflight.set(key, request);
       return request;
     },

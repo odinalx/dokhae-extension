@@ -1,22 +1,30 @@
 import { SITE_URL } from './config';
 import { getSettings } from './settings';
+import { FREE_PER_DAY_FALLBACK, freeLimitMessage } from './freeLimit';
 import { fetchAccount, revokedMessage, SiteApiError, type SiteAccount } from './site';
 
-// Access: scanning needs a valid Dokhae token on an account with a plan. There
-// is no free tier (the way in is a cheap first month), so a valid token on an
-// account without a plan is locked with `not-subscribed`. The verdict is
-// cached in storage so we don't hit the site on every scan; a short offline
-// grace period keeps a flaky connection from locking a user out mid-session.
+// Access: scanning needs a valid Dokhae token. An account with a plan is
+// unlimited; one without gets a few analyses a day (the site counts them, see
+// its src/server/quota.ts), and is locked with `free-limit` once they are
+// spent, until the next day (UTC). The verdict is cached in storage so we
+// don't hit the site on every scan; a short offline grace period keeps a flaky
+// connection from locking a user out mid-session.
+//
+// `not-subscribed` is what an older site answered (subscription_required);
+// it is kept so a refusal still shows the plans.
 
-export type AccessReason = 'no-token' | 'invalid-token' | 'not-subscribed' | 'offline';
+export type AccessReason = 'no-token' | 'invalid-token' | 'not-subscribed' | 'free-limit' | 'offline';
 
 export interface AccessState {
   ok: boolean;
   reason?: AccessReason;
   email?: string;
   plan?: string;
-  /** True on a paid plan. Without one the extension stays locked. */
+  /** True on a paid plan. */
   subscribed?: boolean;
+  /** Without a plan: analyses left today, and the daily allowance. */
+  freeLeft?: number;
+  freePerDay?: number;
   /** With `invalid-token`: the site disconnected this browser, and why. */
   revokedReason?: string;
   checkedAt: number; // when the site last gave a definitive answer
@@ -102,17 +110,34 @@ export async function rememberAccount(account: SiteAccount): Promise<AccessState
         subscribed: true,
         checkedAt: Date.now(),
       }
-    : {
-        ok: false,
-        reason: 'not-subscribed',
-        email: account.email,
-        plan: 'none',
-        subscribed: false,
-        checkedAt: Date.now(),
-      };
+    : freeState(account.email, account.freeLeft, account.freePerDay);
   await writeCache(state);
   return state;
 }
+
+function freeState(email: string | undefined, left: number, perDay: number): AccessState {
+  return {
+    ...(left > 0 ? { ok: true } : { ok: false, reason: 'free-limit' as const }),
+    email,
+    plan: 'none',
+    subscribed: false,
+    freeLeft: Math.max(0, left),
+    freePerDay: perDay,
+    checkedAt: Date.now(),
+  };
+}
+
+/**
+ * A free account just spent an analysis (the site said how many are left), or
+ * was refused for having none (`left` 0): keep the cached verdict in step, so
+ * the popup's counter is right and the next scan is refused without a request.
+ */
+export async function noteFreeLeft(left: number): Promise<void> {
+  const cached = await readCache();
+  if (!cached || cached.subscribed || cached.reason === 'no-token' || cached.reason === 'invalid-token') return;
+  await writeCache(freeState(cached.email, left, cached.freePerDay ?? FREE_PER_DAY_FALLBACK));
+}
+
 
 /** Human message shown in the result panel / popup when locked. */
 export function lockMessage(state: AccessState): string {
@@ -125,6 +150,8 @@ export function lockMessage(state: AccessState): string {
         : `Ton accès à Dokhae a expiré ou a été révoqué. Reconnecte ton compte.`;
     case 'not-subscribed':
       return `Scanner fait partie de l'abonnement Dokhae. Pour un nouveau compte, le premier mois est à 2,99\u00a0€.`;
+    case 'free-limit':
+      return freeLimitMessage(state.freePerDay);
     case 'offline':
       return `Impossible de vérifier ton abonnement (site injoignable). Vérifie ta connexion et réessaie.`;
     default:
@@ -151,14 +178,18 @@ export function lockReason(e: unknown): AccessReason | undefined {
   if (e instanceof AccessLockedError) return e.reason;
   if (e instanceof SiteApiError) {
     if (e.code === 'subscription_required') return 'not-subscribed';
+    if (e.code === 'free_limit_reached') return 'free-limit';
     if (e.status === 401) return 'invalid-token';
   }
   return undefined;
 }
 
-/** Why the website deck is closed to this account, or null when it is open. */
+/**
+ * Why the website deck is closed to this account, or null when it is open.
+ * It is open to free accounts too (their words go to their Parcours deck),
+ * even once the day's analyses are spent: saving is not analysing.
+ */
 export function deckLock(state: AccessState): AccessState | null {
-  if (!state.ok) return state;
-  if (!state.subscribed) return { ...state, ok: false, reason: 'not-subscribed' };
-  return null;
+  if (state.ok || state.reason === 'free-limit') return null;
+  return state;
 }

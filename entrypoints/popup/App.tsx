@@ -15,6 +15,8 @@ interface AccessView {
   email?: string;
   plan?: string;
   subscribed?: boolean;
+  freeLeft?: number;
+  freePerDay?: number;
   revokedReason?: string;
 }
 
@@ -90,6 +92,7 @@ export function App() {
         setAccess({
           ok: resp.ok, reason: resp.reason, email: resp.email,
           plan: resp.plan, subscribed: resp.subscribed, revokedReason: resp.revokedReason,
+          freeLeft: resp.freeLeft, freePerDay: resp.freePerDay,
         });
       }
     } catch {
@@ -207,8 +210,10 @@ export function App() {
           <Logo />
           <span className="brand-name">Dokhae</span>
         </div>
-        {access?.ok && access.plan ? (
+        {access?.subscribed && access.plan ? (
           <span className="plan-chip">{PLAN_NAMES[access.plan] ?? access.plan}</span>
+        ) : access?.subscribed === false && (access.ok || reason === 'free-limit') ? (
+          <span className="plan-chip">Gratuit</span>
         ) : null}
       </header>
 
@@ -246,6 +251,22 @@ export function App() {
               <button className="btn-link" onClick={() => open('/extension')}>Comment ça marche&nbsp;?</button>
             </p>
           )}
+        </section>
+      ) : reason === 'free-limit' ? (
+        <section className="card" aria-labelledby="state-title">
+          <h1 id="state-title" className="card-title">Analyses du jour utilisées</h1>
+          <p className="card-text">
+            Tu as utilisé tes {access?.freePerDay ?? 5} analyses gratuites. Elles reviennent
+            demain. Avec Dokhae complet, tu analyses sans limite&nbsp;: bulles, textes et
+            sous-titres. Le premier mois est à 2,99&nbsp;€ pour un nouveau compte.
+          </p>
+          <button className="btn btn-primary" onClick={() => open('/pricing')}>
+            Voir les formules
+          </button>
+          <button className="btn btn-quiet" onClick={() => void check()} disabled={checking}>
+            {checking ? <><Spinner />Vérification…</> : 'Déjà abonné ? Actualiser'}
+          </button>
+          {access?.email ? <p className="card-foot">Connecté en tant que {access.email}</p> : null}
         </section>
       ) : reason === 'not-subscribed' ? (
         <section className="card" aria-labelledby="state-title">
@@ -312,9 +333,16 @@ export function App() {
             <li><span>3</span>Clique un mot, garde-le dans ton deck</li>
           </ol>
 
+          {access?.subscribed === false && access.freeLeft !== undefined ? (
+            <p className="card-foot" role="status">
+              {access.freeLeft}/{access.freePerDay ?? 5} analyses gratuites aujourd’hui ·{' '}
+              <button className="btn-link" onClick={() => open('/pricing')}>sans limite</button>
+            </p>
+          ) : null}
+
           {videoBlocked ? (
             <p className="card-foot">
-              Sous-titres Netflix et YouTube interactifs&nbsp;:{' '}
+              Sous-titres vidéo interactifs&nbsp;:{' '}
               <button className="btn-link" onClick={allowVideo}>autorise ces sites</button>
             </p>
           ) : null}

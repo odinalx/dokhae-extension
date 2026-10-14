@@ -11,6 +11,7 @@ import { naverWordAudioUrl } from '../src/naver';
 import { sendCardsToAnki } from '../src/anki';
 import {
   analyzeOnSite,
+  spendFreeWord,
   fetchAccount,
   isRejectedCard,
   SiteApiError,
@@ -19,7 +20,7 @@ import {
   warmOnSite,
 } from '../src/site';
 import { createQueue, withCard, withoutIds } from '../src/queue';
-import { type AccessState, clearAccessCache, deckLock, getAccess, lockError, lockReason, rememberAccount } from '../src/access';
+import { type AccessState, clearAccessCache, deckLock, getAccess, lockError, lockReason, noteFreeLeft, rememberAccount } from '../src/access';
 import { SITE_URL } from '../src/config';
 import { prepareForOcr } from '../src/ocrPrep';
 import { CONNECT_PATH, isConnectPage, TOKEN_RE } from '../src/connect';
@@ -212,6 +213,37 @@ export default defineBackground(() => {
     return true;
   });
 
+  // --- A free account opens a word under a video: one analysis -------------
+  onMessage(
+    (msg: unknown, _sender, sendResponse): true | undefined => {
+      const message = msg as ExtensionMessage;
+      if (message.type !== 'FREE_WORD') return undefined;
+
+      (async () => {
+        try {
+          const access = await getAccess();
+          // A subscriber is never counted: no request.
+          if (access.ok && access.subscribed) {
+            sendResponse({ type: 'FREE_WORD_RESULT', ok: true } satisfies ExtensionMessage);
+            return;
+          }
+          if (!access.ok) throw lockError(access);
+          const { siteToken } = await getSettings();
+          const left = await spendFreeWord(siteToken);
+          if (left !== null) await noteFreeLeft(left);
+          sendResponse({ type: 'FREE_WORD_RESULT', ok: true } satisfies ExtensionMessage);
+        } catch (e) {
+          if (e instanceof SiteApiError && e.code === 'free_limit_reached') await noteFreeLeft(0);
+          sendResponse({
+            type: 'FREE_WORD_RESULT', ok: false, message: describe(e), reason: lockReason(e),
+          } satisfies ExtensionMessage);
+        }
+      })();
+
+      return true;
+    }
+  );
+
   // --- Paywall status for the popup / options page --------------------------
   onMessage(
     (msg: unknown, _sender, sendResponse): true | undefined => {
@@ -232,6 +264,8 @@ export default defineBackground(() => {
           email: state.email,
           plan: state.plan,
           subscribed: state.subscribed,
+          freeLeft: state.freeLeft,
+          freePerDay: state.freePerDay,
           revokedReason: state.revokedReason,
           siteUrl: SITE_URL,
         } satisfies ExtensionMessage);
@@ -318,15 +352,18 @@ export default defineBackground(() => {
       (async () => {
         try {
           // Same access rule as a scan.
+          // A video line is analysed even once a free account has spent its
+          // analyses: it only makes the words clickable (FREE_WORD counts).
+          const line = message.line === true;
           const access = await getAccess();
-          if (!access.ok) throw lockError(access);
+          if (!access.ok && !(line && access.reason === 'free-limit')) throw lockError(access);
 
           const mode = message.mode ?? 'user';
           if (mode === 'user') {
             progressTab = sender.tab?.id ?? null;
             report('analyse des mots', 0.8);
           }
-          const analysis = await analyzeText(message.text, undefined, mode);
+          const analysis = await analyzeText(message.text, undefined, mode, line);
           if (mode === 'user') progressTab = null;
 
           sendResponse({ type: 'CAPTURE_RESULT', analysis } satisfies ExtensionMessage);
@@ -632,6 +669,7 @@ async function analyzeText(
   raw: string,
   uncertain?: number[],
   mode: AnalyzeMode = 'user',
+  line = false,
 ): Promise<AnalysisResult> {
   const empty = { text: '', sentenceTranslation: '', tone: '', words: [] };
   if (!raw?.trim()) return empty;
@@ -641,7 +679,7 @@ async function analyzeText(
 
   if (mode === 'user') report('traduction', 0.85);
   try {
-    return await analyzer.analyze(raw, { mode, uncertain });
+    return await analyzer.analyze(raw, { mode, uncertain, line });
   } catch (e) {
     if (e instanceof CacheMissError || e instanceof BackingOffError) throw e;
     console.error('[Dokhae] analysis failed:', e);
@@ -651,6 +689,9 @@ async function analyzeText(
       // The cached verdict said "subscribed", the server disagrees: drop the
       // cache so the popup rechecks and shows the paywall.
       if (e.code === 'subscription_required' || e.status === 401) await clearAccessCache();
+      // A scan refused for a spent allowance: the next one is refused here.
+      // (A line refused is the separate, larger cap on video lines.)
+      if (e.code === 'free_limit_reached' && !line) await noteFreeLeft(0);
       throw e;
     }
     return { ...empty, text: raw };
@@ -689,9 +730,9 @@ async function noteAnalyserUsed(): Promise<void> {
 
 const analyzer = createAnalyzer({
   cache: analysisCache(),
-  async fetch(text, uncertain) {
+  async fetch(text, uncertain, line) {
     const { siteToken } = await getSettings();
-    const analysis = await analyzeOnSite(siteToken, text, uncertain);
+    const analysis = await analyzeOnSite(siteToken, text, uncertain, line, (left) => void noteFreeLeft(left));
     await noteAnalyserUsed();
     return analysis;
   },

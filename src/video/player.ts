@@ -1,5 +1,6 @@
 import type { AnalysisResult, ExtensionMessage, Settings } from '../types';
 import type { AnalyzeMode } from '../analyzer';
+import type { AccessReason } from '../access';
 import { HANGUL_RE } from '../hangul';
 import { phraseParts } from '../phrase';
 import { getSettings, saveSettings, TOKEN_KEY } from '../settings';
@@ -13,6 +14,7 @@ import {
   posColor,
   posLabel,
   renderResults,
+  setPanelError,
 } from '../panel';
 import { CueHistory, type Cue } from './cues';
 import { LineAnalyzer, type Outcome } from './lines';
@@ -90,6 +92,8 @@ export class VideoSubtitles {
   private showTranslation = false;
   private hintShown = false;
   private lastTitle = '';
+  /** Words already opened here (line, word): opening one again is free. */
+  private openedWords = new Set<string>();
   private lines = new LineAnalyzer(askBackground);
   private readonly hintKey: string;
   private readonly translationKey: string;
@@ -414,7 +418,15 @@ export class VideoSubtitles {
   // A word clicked: pause, open the panel on it
   // -------------------------------------------------------------------------
 
-  openWord(shown: Shown, analysis: AnalysisResult, index: number) {
+  /**
+   * A free account spends one of its daily analyses on each word it opens
+   * (the line itself was analysed for free). A subscriber's answer comes
+   * from the background's cached access, without a request.
+   */
+  async openWord(shown: Shown, analysis: AnalysisResult, index: number) {
+    const opened = `${index}\u0000${analysis.text}`;
+    const refusal = this.openedWords.has(opened) ? null : await spendWord();
+    if (!refusal) this.openedWords.add(opened);
     const video = this.video();
     if (video && !video.paused) {
       video.pause();
@@ -443,7 +455,8 @@ export class VideoSubtitles {
     // A line still growing is shown with the analysis of its start: the
     // example (and its translation) is that start, not the longer line.
     const example = this.lines.cached(shown.text) === analysis ? shown.text : (shown.grownFrom ?? shown.text);
-    renderResults(panel, { ...analysis, text: example }, index);
+    if (refusal) setPanelError(panel, refusal.message, undefined, refusal.reason);
+    else renderResults(panel, { ...analysis, text: example }, index);
   }
 
   // -------------------------------------------------------------------------
@@ -521,12 +534,24 @@ export class VideoSubtitles {
   }
 }
 
+/** Ask the background to count a word opened by a free account; null when allowed. */
+async function spendWord(): Promise<{ message: string; reason?: AccessReason } | null> {
+  const resp = (await browser.runtime
+    .sendMessage({ type: 'FREE_WORD' } satisfies ExtensionMessage)
+    .catch(() => undefined)) as ExtensionMessage | undefined;
+  if (resp?.type !== 'FREE_WORD_RESULT') {
+    return { message: 'L’extension a été mise à jour. Actualise la page et réessaie.' };
+  }
+  return resp.ok ? null : { message: resp.message ?? '', reason: resp.reason };
+}
+
 /** One ANALYZE_TEXT round trip to the background, as an Outcome. */
 async function askBackground(text: string, mode: AnalyzeMode): Promise<Outcome> {
   const resp = (await browser.runtime.sendMessage({
     type: 'ANALYZE_TEXT',
     text,
     mode,
+    line: true,
   } satisfies ExtensionMessage)) as ExtensionMessage | undefined;
   if (resp?.type === 'CAPTURE_RESULT') return { ok: true, analysis: resp.analysis };
   if (resp?.type === 'CAPTURE_ERROR') {
@@ -661,7 +686,7 @@ class Overlay {
       b.textContent = info.surface;
       b.title = [posLabel(info.pos), info.translation].filter(Boolean).join(' · ');
       b.style.setProperty('--c', onDark(posColor(info.pos)));
-      b.addEventListener('click', () => this.owner.openWord(shown, analysis, part.index));
+      b.addEventListener('click', () => void this.owner.openWord(shown, analysis, part.index));
       words.appendChild(b);
     });
     this.line.appendChild(words);

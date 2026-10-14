@@ -13,6 +13,9 @@ interface AccessView {
   reason?: string;
   email?: string;
   plan?: string;
+  subscribed?: boolean;
+  freeLeft?: number;
+  freePerDay?: number;
   revokedReason?: string;
 }
 
@@ -44,6 +47,7 @@ export function App() {
       if (resp && resp.type === 'ACCESS_INFO') {
         setAccess({
           ok: resp.ok, reason: resp.reason, email: resp.email, plan: resp.plan,
+          subscribed: resp.subscribed, freeLeft: resp.freeLeft, freePerDay: resp.freePerDay,
           revokedReason: resp.revokedReason,
         });
       }
@@ -136,14 +140,21 @@ export function App() {
                 <span className="field-label">Connecté en tant que</span>
                 <strong>{access.email || 'compte Dokhae'}</strong>
               </div>
-              {access.ok && access.plan ? (
+              {access.subscribed && access.plan ? (
                 <span className="badge on">Formule {PLAN_NAMES[access.plan] ?? access.plan}</span>
+              ) : access.subscribed === false && (access.ok || access.reason === 'free-limit') ? (
+                <span className="badge">
+                  Gratuit · {access.freeLeft ?? 0}/{access.freePerDay ?? 5} analyses aujourd’hui
+                </span>
               ) : null}
             </div>
-            {access.reason === 'not-subscribed' && (
+            {(access.reason === 'not-subscribed' || access.reason === 'free-limit') && (
               <div className="notice">
                 <p>
-                  Scanner fait partie de l’abonnement Dokhae. Pour un nouveau compte, le
+                  {access.reason === 'free-limit'
+                    ? `Tes ${access.freePerDay ?? 5} analyses gratuites du jour sont utilisées, elles reviennent demain. `
+                    : ''}
+                  Avec Dokhae complet, tu analyses sans limite. Pour un nouveau compte, le
                   premier mois est à 2,99{NB}€.
                 </p>
                 <div className="actions">
@@ -456,6 +467,7 @@ function AccessBadge({ access, checking }: { access: AccessView | null; checking
   if (access.ok) return <span className="badge ok">Connecté</span>;
   const label =
     access.reason === 'not-subscribed' ? 'Sans abonnement'
+    : access.reason === 'free-limit' ? 'Analyses du jour utilisées'
     : access.reason === 'offline' ? 'Hors connexion'
     : access.reason === 'invalid-token' ? 'Accès expiré'
     : 'Non connecté';

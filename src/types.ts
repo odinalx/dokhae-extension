@@ -163,6 +163,21 @@ export interface AnalyzeTextRequest {
    * the cache, with code "cache_miss" otherwise.
    */
   mode?: AnalyzeMode;
+  /** A video subtitle line: a free account's lines do not spend its analyses. */
+  line?: boolean;
+}
+
+// content (video subtitles) -> background: a free account opens a word, which
+// spends one of its daily analyses. Answers FREE_WORD_RESULT.
+export interface FreeWordRequest {
+  type: 'FREE_WORD';
+}
+export interface FreeWordResult {
+  type: 'FREE_WORD_RESULT';
+  ok: boolean;
+  /** Refused: the French message and why (free-limit, no-token…). */
+  message?: string;
+  reason?: AccessReason;
 }
 
 // background -> offscreen document (OCR)
@@ -228,6 +243,8 @@ export interface AccessInfo {
   email?: string;
   plan?: string;
   subscribed?: boolean;
+  freeLeft?: number; // without a plan: analyses left today
+  freePerDay?: number;
   revokedReason?: string; // with 'invalid-token': why the site disconnected this browser
   siteUrl: string; // site origin, for "open the website" links
 }
@@ -310,6 +327,8 @@ export type ExtensionMessage =
   | Pong
   | AnalyzeSelection
   | AnalyzeTextRequest
+  | FreeWordRequest
+  | FreeWordResult
   | CaptureRequest
   | CaptureResult
   | CaptureError

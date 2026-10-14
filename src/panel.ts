@@ -209,7 +209,9 @@ export function lockAction(reason: AccessReason | undefined): { label: string; h
   if (reason === 'no-token' || reason === 'invalid-token') {
     return { label: 'Connecter mon compte', href: `${SITE_URL}${CONNECT_PATH}` };
   }
-  if (reason === 'not-subscribed') return { label: 'Voir les formules', href: `${SITE_URL}/pricing` };
+  if (reason === 'not-subscribed' || reason === 'free-limit') {
+    return { label: 'Voir les formules', href: `${SITE_URL}/pricing` };
+  }
   return null;
 }
 
@@ -219,7 +221,7 @@ export function setPanelError(shadow: ShadowRoot, msg: string, onRetry?: () => v
   // With a fix on offer, it leads; retrying becomes the quiet second choice.
   body.innerHTML = `
     <div class="error" role="alert">
-      <span class="error-title">${action ? 'Accès verrouillé' : 'Ça n’a pas marché'}</span>
+      <span class="error-title">${reason === 'free-limit' ? 'Analyses du jour utilisées' : action ? 'Accès verrouillé' : 'Ça n’a pas marché'}</span>
       <span>${esc(msg)}</span>
     </div>
     ${action ? `<a class="btn btn-primary" href="${esc(action.href)}" target="_blank" rel="noreferrer">${esc(action.label)}</a>` : ''}
