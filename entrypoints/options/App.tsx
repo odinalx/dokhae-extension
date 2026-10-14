@@ -4,7 +4,7 @@ import { getSettings, saveSettings, hasVoiceCreds, setSiteToken, TOKEN_KEY } fro
 import { analysisCache } from '../../src/analysisCache';
 import { fetchDecks, logoutDevice, revokedMessage, type SiteDeck } from '../../src/site';
 import { clearAccessCache } from '../../src/access';
-import { hasNetflixAccess, requestNetflixAccess } from '../../src/permissions';
+import { hasVideoAccess, requestVideoAccess } from '../../src/permissions';
 import { SITE_URL } from '../../src/config';
 import { CONNECT_PATH } from '../../src/connect';
 
@@ -100,13 +100,14 @@ export function App() {
     void refreshAccess(true);
   };
 
-  // Firefox lets the reader withhold netflix.com: the subtitles then stay off.
-  const [netflixAccess, setNetflixAccess] = useState(true);
+  // Firefox lets the reader withhold netflix.com and youtube.com: the
+  // subtitles then stay off.
+  const [videoAccess, setVideoAccess] = useState(true);
   useEffect(() => {
-    void hasNetflixAccess().then(setNetflixAccess);
+    void hasVideoAccess().then(setVideoAccess);
   }, []);
-  const allowNetflix = () => {
-    requestNetflixAccess().then(setNetflixAccess).catch(() => {});
+  const allowVideo = () => {
+    requestVideoAccess().then(setVideoAccess).catch(() => {});
   };
 
   const connected = Boolean(access?.ok || access?.reason === 'not-subscribed');
@@ -327,11 +328,11 @@ export function App() {
             Remplace les sous-titres coréens de Netflix par la ligne analysée de Dokhae.
           </span>
         </label>
-        {settings.netflixSubtitles && !netflixAccess && (
+        {settings.netflixSubtitles && !videoAccess && (
           <div className="notice warn-hint" role="alert">
             <p>Ton navigateur n’autorise pas encore Dokhae sur netflix.com.</p>
             <div className="actions">
-              <button className="btn btn-quiet" onClick={allowNetflix}>Autoriser netflix.com</button>
+              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser netflix.com et youtube.com</button>
             </div>
           </div>
         )}
@@ -345,6 +346,52 @@ export function App() {
           <span>
             <strong>Pause à la fin de chaque réplique</strong><br />
             Le temps de lire avant la suite. <kbd>P</kbd> l’active ou la coupe pendant la lecture.
+          </span>
+        </label>
+      </section>
+
+      <section aria-labelledby="youtube-title">
+        <div className="sec-head">
+          <h2 id="youtube-title">YouTube</h2>
+          <span className={settings.youtubeSubtitles ? 'badge on' : 'badge'}>
+            {settings.youtubeSubtitles ? 'activé' : 'désactivé'}
+          </span>
+        </div>
+        <p className="hint">
+          Sur youtube.com, active les sous-titres coréens de la vidéo (ceux de la chaîne
+          ou les automatiques){NB}: Dokhae les redessine mot à mot, comme sur Netflix.
+          Mêmes raccourcis{NB}; <kbd>T</kbd> affiche la traduction au lieu du mode cinéma.
+        </p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.youtubeSubtitles}
+            onChange={(e) => update({ youtubeSubtitles: e.target.checked })}
+          />
+          <span>
+            <strong>Sous-titres YouTube interactifs</strong><br />
+            Remplace les sous-titres coréens de YouTube par la ligne analysée de Dokhae.
+          </span>
+        </label>
+        {settings.youtubeSubtitles && !videoAccess && (
+          <div className="notice warn-hint" role="alert">
+            <p>Ton navigateur n’autorise pas encore Dokhae sur youtube.com.</p>
+            <div className="actions">
+              <button className="btn btn-quiet" onClick={allowVideo}>Autoriser netflix.com et youtube.com</button>
+            </div>
+          </div>
+        )}
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={settings.youtubeAutoPause}
+            onChange={(e) => update({ youtubeAutoPause: e.target.checked })}
+            disabled={!settings.youtubeSubtitles}
+          />
+          <span>
+            <strong>Pause à la fin de chaque réplique</strong><br />
+            Utile avec les sous-titres de la chaîne. Les automatiques s’écrivent mot à mot{NB}:
+            la pause attend qu’ils s’effacent.
           </span>
         </label>
       </section>
