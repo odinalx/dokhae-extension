@@ -11,7 +11,8 @@ export function subtitleText(lines: string[]): string {
 /**
  * Whether `lines` carry on the line already shown rather than replace it:
  * the same text with more words, or the last row moved up to the top as a
- * rolling caption scrolls.
+ * rolling caption scrolls. Only asked for rolling captions: between two
+ * ordinary lines, "네" then "네, 알겠어요" are two lines.
  */
 export function continues(shown: { lines: string[]; text: string }, lines: string[], text: string): boolean {
   if (text.length > shown.text.length && text.startsWith(shown.text)) return true;

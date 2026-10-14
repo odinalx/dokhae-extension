@@ -40,6 +40,8 @@ import { continues, subtitleText } from './text';
 const SEEK_LEAD = 0.3;
 /** A jump's target stays the anchor of the next A/R this long (see CueHistory.previous). */
 const JUMP_ANCHOR_MS = 2500;
+/** A line written word by word is analysed after this long without a new word. */
+const ROLLING_DWELL_MS = 900;
 /** A line gone for less than this was a redraw, not the end of the line. */
 const LINE_END_DEBOUNCE_MS = 150;
 /** How many times the shortcut reminder shows, across sessions. */
@@ -64,6 +66,11 @@ interface Shown {
   lines: string[];
   text: string;
   cue: Cue;
+  /**
+   * For a line still being written: the start of it that was last analysed,
+   * whose words stay clickable while the rest waits for its own analysis.
+   */
+  grownFrom?: string;
 }
 
 export class VideoSubtitles {
@@ -272,7 +279,9 @@ export class VideoSubtitles {
     const previous = this.shown;
     // A line written word by word (YouTube's automatic captions) grows, or
     // scrolls up a row, without ending: no end-of-line pause, and the same cue.
-    const continued = previous && previous.key !== key && continues(previous, lines, text) ? previous : null;
+    const rolling = Boolean(root && this.site.isRolling?.(root));
+    const continued =
+      rolling && previous && previous.key !== key && continues(previous, lines, text) ? previous : null;
     if (previous && previous.key !== key) this.endLine(Boolean(continued));
     this.lastKey = key;
 
@@ -295,7 +304,11 @@ export class VideoSubtitles {
     if (this.jump && (this.jump.cue === cue || performance.now() - this.jump.at > JUMP_ANCHOR_MS)) {
       this.jump = null;
     }
-    this.shown = { key, lines, text, cue };
+    let grownFrom: string | undefined;
+    if (continued && text.startsWith(continued.text)) {
+      grownFrom = this.lines.cached(continued.text) ? continued.text : continued.grownFrom;
+    }
+    this.shown = { key, lines, text, cue, grownFrom };
     if (root) this.hideNative(root);
     this.overlay?.attach(this.mount());
     this.overlay?.place(root);
@@ -306,7 +319,7 @@ export class VideoSubtitles {
       () => {
         if (this.shown?.key === key) this.render();
       },
-      root ? this.site.dwellMs?.(root) : undefined,
+      rolling ? ROLLING_DWELL_MS : undefined,
     );
   }
 
@@ -358,6 +371,12 @@ export class VideoSubtitles {
     const analysis = this.lines.cached(shown.text);
     if (analysis) {
       this.overlay.showWords(shown, analysis, this.showTranslation);
+      return;
+    }
+    const start = shown.grownFrom ? this.lines.cached(shown.grownFrom) : undefined;
+    if (start) {
+      // The words analysed so far stay clickable; the new ones show as text.
+      this.overlay.showWords(shown, start, this.showTranslation);
       return;
     }
     const pending = this.lines.isPending(shown.text);
@@ -421,7 +440,10 @@ export class VideoSubtitles {
     this.switchingPanel = false;
     shieldFromPlayer(panel.host);
     // The example is the subtitle as shown, not the server's cleaned copy.
-    renderResults(panel, { ...analysis, text: shown.text }, index);
+    // A line still growing is shown with the analysis of its start: the
+    // example (and its translation) is that start, not the longer line.
+    const example = this.lines.cached(shown.text) === analysis ? shown.text : (shown.grownFrom ?? shown.text);
+    renderResults(panel, { ...analysis, text: example }, index);
   }
 
   // -------------------------------------------------------------------------

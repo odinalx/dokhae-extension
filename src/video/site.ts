@@ -51,10 +51,11 @@ export interface SubtitleSite {
   /** Move playback to `seconds` on the <video>'s clock. */
   seek(video: HTMLVideoElement, seconds: number): void;
   /**
-   * How long a line waits on screen before the site is asked, when it differs
-   * from LineAnalyzer's default (a line still being written word by word).
+   * Whether the captions on screen are written word by word and scroll up
+   * (YouTube's automatic captions). Such a line is only analysed after a
+   * pause in it, and its growth is not the end of a line. Never, when absent.
    */
-  dwellMs?(root: Element): number | undefined;
+  isRolling?(root: Element): boolean;
   /** The shortcut reminder shown the first few times. */
   hint: string;
 }
