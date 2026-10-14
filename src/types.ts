@@ -37,6 +37,13 @@ export interface Settings {
   youtubeSubtitles: boolean;
   // YouTube: pause the video when each caption line ends.
   youtubeAutoPause: boolean;
+  /** The same on Viki, Disney+ and Prime Video (src/viki, src/disney, src/prime). */
+  vikiSubtitles: boolean;
+  vikiAutoPause: boolean;
+  disneySubtitles: boolean;
+  disneyAutoPause: boolean;
+  primeSubtitles: boolean;
+  primeAutoPause: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,6 +60,12 @@ export const DEFAULT_SETTINGS: Settings = {
   netflixAutoPause: false,
   youtubeSubtitles: true,
   youtubeAutoPause: false,
+  vikiSubtitles: true,
+  vikiAutoPause: false,
+  disneySubtitles: true,
+  disneyAutoPause: false,
+  primeSubtitles: true,
+  primeAutoPause: false,
 };
 
 // One Anki card waiting in the session queue (or being sent directly).

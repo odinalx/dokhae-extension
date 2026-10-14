@@ -28,16 +28,23 @@ Before uploading, check `.output/chrome-mv3/manifest.json` (and the same in
 - `name` Dokhae, `version` bumped (the store refuses a version it has seen),
 - `host_permissions` ends with `https://dokhae.fr/*` and holds no
   `localhost:3000` and no `<all_urls>`,
-- `content_scripts` has only `https://dokhae.fr/connect-extension*`, the
-  two Netflix scripts on `https://www.netflix.com/*` (`netflix.js`, and
-  `netflix-seek.js` in the `MAIN` world) and the YouTube script on
-  `https://www.youtube.com/*` (`youtube.js`).
+- `content_scripts` has only:
+  - `https://dokhae.fr/connect-extension*`,
+  - the two Netflix scripts on `https://www.netflix.com/*` (`netflix.js`,
+    and `netflix-seek.js` in the `MAIN` world),
+  - the YouTube script on `https://www.youtube.com/*` (`youtube.js`),
+  - the Viki script on `https://www.viki.com/*` (`viki.js`),
+  - the two Disney+ scripts on `https://www.disneyplus.com/*` (`disney.js`,
+    and `disney-seek.js` in the `MAIN` world),
+  - the Prime Video script (`prime.js`) on `https://www.primevideo.com/*`,
+    `https://www.amazon.fr/gp/video/*` and `https://www.amazon.com/gp/video/*`
+    (only the video pages of Amazon, never the whole shop).
 
 The video scripts widen the permissions: on the update that brings them
-(Netflix in 1.4.0, YouTube in 1.5.0), Chrome disables the installed
-extension until the reader accepts the new site, and the store may review
-it by hand. The justification
-is in the listings; repeat it in the notes to the reviewer.
+(Netflix in 1.4.0, YouTube in 1.5.0, Viki, Disney+ and Prime Video together
+in 1.6.0), Chrome disables the installed extension until the reader accepts
+the new sites, and the store may review it by hand. The justification is in
+the listings, one row per host; repeat it in the notes to the reviewer.
 
 For an update, bump `version` in both `wxt.config.ts` and `package.json`.
 

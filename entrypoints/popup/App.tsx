@@ -125,7 +125,7 @@ export function App() {
   const [videoBlocked, setVideoBlocked] = useState(false);
   useEffect(() => {
     void Promise.all([hasVideoAccess(), getSettings()])
-      .then(([ok, s]) => setVideoBlocked(!ok && (s.netflixSubtitles || s.youtubeSubtitles)))
+      .then(([ok, s]) => setVideoBlocked(!ok && (s.netflixSubtitles || s.youtubeSubtitles || s.vikiSubtitles || s.disneySubtitles || s.primeSubtitles)))
       .catch(() => {});
   }, []);
   const allowVideo = () => {

@@ -80,6 +80,7 @@ export class VideoSubtitles {
   private active = false;
   private observer: MutationObserver | null = null;
   private frame = 0;
+  private poll = 0;
   private endTimer = 0;
   private lastKey = '';
   private shown: Shown | null = null;
@@ -177,6 +178,7 @@ export class VideoSubtitles {
       if (this.concernsSubtitles(records)) this.schedule();
     });
     this.observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    if (this.site.pollMs) this.poll = window.setInterval(() => this.schedule(), this.site.pollMs);
     window.addEventListener('keydown', this.onKey, true);
     document.addEventListener('fullscreenchange', this.onFullscreen);
     window.addEventListener('scroll', this.onViewport, { passive: true });
@@ -189,6 +191,8 @@ export class VideoSubtitles {
     this.active = false;
     this.observer?.disconnect();
     this.observer = null;
+    clearInterval(this.poll);
+    this.poll = 0;
     // Reset too: a frame cancelled here but still counted would make
     // schedule() a no-op for good once the subtitles are switched back on.
     cancelAnimationFrame(this.frame);
@@ -354,7 +358,7 @@ export class VideoSubtitles {
     root.setAttribute(HIDDEN_ATTR, '');
     this.hiddenRoot = root;
     document.documentElement.classList.add(koreanClass(this.site));
-    this.overlay?.ensureNativeStyle();
+    this.overlay?.ensureNativeStyle(root);
   }
 
   private unhideNative() {
@@ -576,6 +580,7 @@ class Overlay {
   private toastEl: HTMLElement;
   private toastTimer = 0;
   private nativeStyle: HTMLStyleElement | null = null;
+  private shadowStyled = new WeakSet<ShadowRoot>();
 
   constructor(private owner: VideoSubtitles) {
     this.host = document.createElement('div');
@@ -605,13 +610,23 @@ class Overlay {
   }
 
   /** The player's own layer is hidden by attribute, from a rule in the page. */
-  ensureNativeStyle() {
-    if (this.nativeStyle?.isConnected) return;
-    this.nativeStyle = document.createElement('style');
+  ensureNativeStyle(root?: Element) {
     const { site } = this.owner;
-    this.nativeStyle.textContent =
-      `[${HIDDEN_ATTR}], html.${koreanClass(site)} ${site.nativeSelector} { visibility: hidden !important; }`;
-    (document.head ?? document.documentElement).appendChild(this.nativeStyle);
+    if (!this.nativeStyle?.isConnected) {
+      this.nativeStyle = document.createElement('style');
+      this.nativeStyle.textContent =
+        `[${HIDDEN_ATTR}], html.${koreanClass(site)} ${site.nativeSelector} { visibility: hidden !important; }`;
+      (document.head ?? document.documentElement).appendChild(this.nativeStyle);
+    }
+    // A layer inside a shadow root (Disney+) is out of the page's styles'
+    // reach: the attribute rule goes into that root too.
+    const shadow = root?.getRootNode();
+    if (shadow instanceof ShadowRoot && !this.shadowStyled.has(shadow)) {
+      const style = document.createElement('style');
+      style.textContent = `[${HIDDEN_ATTR}] { visibility: hidden !important; }`;
+      shadow.appendChild(style);
+      this.shadowStyled.add(shadow);
+    }
   }
 
   /**

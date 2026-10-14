@@ -56,6 +56,11 @@ export interface SubtitleSite {
    * pause in it, and its growth is not the end of a line. Never, when absent.
    */
   isRolling?(root: Element): boolean;
+  /**
+   * Also read the subtitles every `pollMs`, for a player that draws them in
+   * a shadow root: changes there never reach the page's MutationObserver.
+   */
+  pollMs?: number;
   /** The shortcut reminder shown the first few times. */
   hint: string;
 }
