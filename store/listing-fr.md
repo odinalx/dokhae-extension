@@ -21,13 +21,15 @@ Comment ça marche :
 
 Sur Netflix, avec les sous-titres coréens affichés, Dokhae redessine chaque réplique mot à mot, au même endroit, plein écran compris : chaque mot est souligné selon sa nature et se clique. Le clic met la vidéo en pause et ouvre la fiche du mot ; « Ajouter au deck » garde la réplique entière comme exemple, avec sa traduction et le titre de l'épisode. Pendant la lecture : A revient à la réplique précédente, R la rejoue, T affiche la traduction, P met en pause à la fin de chaque réplique. Tout se désactive dans les réglages.
 
+Sur YouTube, pareil avec les sous-titres coréens de la vidéo, ceux de la chaîne comme les automatiques : vlogs, variétés, clips de K-pop. La carte garde le titre de la vidéo et un lien vers le moment exact.
+
 Tu peux aussi sélectionner du texte coréen sur n'importe quelle page, puis faire un clic droit et choisir « Analyser avec Dokhae », ou cliquer sur « Analyser la sélection » dans la fenêtre de l'extension.
 
 Chaque mot ajouté garde un lien vers la page où tu l'as trouvé : dans tes révisions, tu retrouves le chapitre d'un clic.
 
 Ce qui compte pour toi :
 • La lecture de l'image se fait sur ton ordinateur. Seul le texte reconnu part vers Dokhae pour l'analyse.
-• Dokhae ne lit que l'onglet où tu l'appelles, au moment où tu l'appelles. Seule exception, Netflix : pendant la lecture, Dokhae lit le sous-titre affiché à l'écran (jamais la vidéo ni le fichier de sous-titres), et seulement s'il est en coréen. Un interrupteur le coupe.
+• Dokhae ne lit que l'onglet où tu l'appelles, au moment où tu l'appelles. Seules exceptions, Netflix et YouTube : pendant la lecture, Dokhae lit le sous-titre affiché à l'écran (jamais la vidéo ni le fichier de sous-titres), et seulement s'il est en coréen. Un interrupteur par site le coupe.
 • Pas de publicité, aucune revente de données.
 • Tes mots peuvent aussi partir dans Anki (module AnkiConnect), si tu préfères.
 
@@ -45,7 +47,7 @@ Français
 
 ## Objectif unique (Single purpose)
 
-Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres Netflix : l'extension lit le texte coréen d'une zone ou d'une sélection choisie par l'utilisateur, ou le sous-titre coréen affiché par le lecteur Netflix, l'explique mot à mot, et enregistre les mots choisis dans son deck de révision Dokhae.
+Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres Netflix et YouTube : l'extension lit le texte coréen d'une zone ou d'une sélection choisie par l'utilisateur, ou le sous-titre coréen affiché par le lecteur Netflix ou YouTube, l'explique mot à mot, et enregistre les mots choisis dans son deck de révision Dokhae.
 
 ## Justification des autorisations
 
@@ -61,6 +63,7 @@ Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres N
 | `https://ko.dict.naver.com/*` | Trouver l'enregistrement audio d'un mot dans le dictionnaire coréen de Naver. |
 | `https://dict-dn.pstatic.net/*` | Télécharger ce fichier audio (serveur de fichiers du dictionnaire Naver). |
 | `https://www.netflix.com/*` (scripts de contenu) | Lire le sous-titre coréen affiché par le lecteur Netflix pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique avec le lecteur de Netflix. Le script tourne sur tout le domaine car Netflix change de page sans la recharger, mais il ne fait rien en dehors de `/watch/`. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
+| `https://www.youtube.com/*` (script de contenu) | Lire le sous-titre coréen affiché par le lecteur YouTube pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique. Le script tourne sur tout le domaine car YouTube change de page sans la recharger, mais il ne fait rien en dehors des pages de vidéo. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
 | `http://127.0.0.1:8765/*`, `http://localhost:8765/*` | AnkiConnect, sur l'ordinateur de l'utilisateur : utilisé uniquement si l'utilisateur choisit Anki comme destination de ses cartes. |
 
 Code distant : **non**. Tout le code est dans le paquet (le modèle de reconnaissance coréen compris).
@@ -70,7 +73,7 @@ Code distant : **non**. Tout le code est dans le paquet (le modèle de reconnai
 Données collectées (cases à cocher) :
 - **Informations permettant d'identifier personnellement l'utilisateur** : oui, l'adresse e-mail du compte Dokhae, reçue du site pour afficher le compte connecté.
 - **Informations d'authentification** : oui, le jeton d'accès Dokhae (`sori_…`), stocké localement et envoyé uniquement à dokhae.fr.
-- **Contenu du site Web** : oui, le texte coréen reconnu dans la zone choisie (ou le texte sélectionné, ou le sous-titre coréen affiché sur Netflix) est envoyé à dokhae.fr pour l'analyse. Les mots écoutés sont envoyés au dictionnaire Naver ou à Google pour la prononciation.
+- **Contenu du site Web** : oui, le texte coréen reconnu dans la zone choisie (ou le texte sélectionné, ou le sous-titre coréen affiché sur Netflix ou YouTube) est envoyé à dokhae.fr pour l'analyse. Les mots écoutés sont envoyés au dictionnaire Naver ou à Google pour la prononciation.
 - **Historique Web** : oui, par prudence : quand l'utilisateur ajoute un mot à son deck, l'adresse de la page où il l'a trouvé est enregistrée avec la carte, pour qu'il puisse y revenir. Rien n'est envoyé tant qu'il n'ajoute pas de mot.
 - Santé, finances, communications personnelles, localisation, activité de l'utilisateur : **non**.
 

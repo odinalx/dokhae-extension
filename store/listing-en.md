@@ -24,13 +24,15 @@ How it works:
 
 On Netflix, with Korean subtitles on, Dokhae redraws each line word by word in the same place, fullscreen included: every word is underlined by part of speech and clickable. A click pauses the video and opens the word's card; "Ajouter au deck" keeps the whole line as the example, with its translation and the episode title. While watching: A goes back to the previous line, R replays it, T shows the translation, P pauses at the end of each line. All of it can be switched off in the settings.
 
+On YouTube, the same with the video's Korean captions, the channel's own or the automatic ones: vlogs, variety shows, K-pop clips. The card keeps the video title and a link to the exact moment.
+
 You can also select Korean text on any page, then right-click and choose "Analyser avec Dokhae", or click "Analyser la sélection" in the extension's window.
 
 Every word you add keeps a link to the page you found it on: from your reviews, one click takes you back to the chapter.
 
 What matters:
 • Text recognition runs on your computer. Only the recognised text is sent to Dokhae for analysis.
-• Dokhae only reads the tab you call it on, when you call it. The one exception is Netflix: while you watch, Dokhae reads the subtitle shown on screen (never the video or the subtitle file), and only when it is Korean. A switch turns it off.
+• Dokhae only reads the tab you call it on, when you call it. The exceptions are Netflix and YouTube: while you watch, Dokhae reads the subtitle shown on screen (never the video or the subtitle file), and only when it is Korean. One switch per site turns it off.
 • No ads, no data sales.
 • Words can go to Anki instead (AnkiConnect add-on), if you prefer.
 
@@ -44,7 +46,7 @@ Education
 
 ## Single purpose
 
-Help people read Korean in webtoons, on the web and in Netflix subtitles: the extension reads the Korean text in an area or selection the user picks, or the Korean subtitle the Netflix player shows, explains it word by word, and saves the words they choose to their Dokhae review deck.
+Help people read Korean in webtoons, on the web and in Netflix and YouTube subtitles: the extension reads the Korean text in an area or selection the user picks, or the Korean subtitle the Netflix or YouTube player shows, explains it word by word, and saves the words they choose to their Dokhae review deck.
 
 ## Permission justifications
 
@@ -60,6 +62,7 @@ Help people read Korean in webtoons, on the web and in Netflix subtitles: the ex
 | `https://ko.dict.naver.com/*` | Look up a word's audio recording in Naver's Korean dictionary. |
 | `https://dict-dn.pstatic.net/*` | Download that audio file (Naver dictionary's file server). |
 | `https://www.netflix.com/*` (content scripts) | Read the Korean subtitle the Netflix player shows, redraw it word by word and make it clickable, pause the video when a word is clicked, and go back to a line through Netflix's own player. The script matches the whole domain because Netflix changes pages without reloading, but it does nothing outside `/watch/`. Neither the video nor the subtitle files are downloaded. |
+| `https://www.youtube.com/*` (content script) | Read the Korean caption the YouTube player shows, redraw it word by word and make it clickable, pause the video when a word is clicked, and go back to a line. The script matches the whole domain because YouTube changes pages without reloading, but it does nothing outside video pages. Neither the video nor the caption files are downloaded. |
 | `http://127.0.0.1:8765/*`, `http://localhost:8765/*` | AnkiConnect on the user's own computer, used only if they pick Anki as the destination for their cards. |
 
 Remote code: **no**. All code ships in the package, the Korean recognition model included.
@@ -69,7 +72,7 @@ Remote code: **no**. All code ships in the package, the Korean recognition model
 Data collected:
 - **Personally identifiable information**: yes, the Dokhae account email, received from the site to show which account is connected.
 - **Authentication information**: yes, the Dokhae access token (`sori_…`), stored locally and only ever sent to dokhae.fr.
-- **Website content**: yes, the Korean text recognised in the framed area (or the selected text, or the Korean subtitle shown on Netflix) is sent to dokhae.fr for analysis. Words the user listens to are sent to the Naver dictionary or Google for pronunciation.
+- **Website content**: yes, the Korean text recognised in the framed area (or the selected text, or the Korean subtitle shown on Netflix or YouTube) is sent to dokhae.fr for analysis. Words the user listens to are sent to the Naver dictionary or Google for pronunciation.
 - **Web history**: yes, to be safe: when the user adds a word to their deck, the address of the page it came from is saved with the card, so they can go back to it. Nothing is sent until they add a word.
 - Health, financial, personal communications, location, user activity: **no**.
 
