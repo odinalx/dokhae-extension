@@ -23,17 +23,19 @@ Sur Netflix, avec les sous-titres coréens affichés, Dokhae redessine chaque r�
 
 Sur YouTube, pareil avec les sous-titres coréens de la vidéo, ceux de la chaîne comme les automatiques : vlogs, variétés, clips de K-pop. La carte garde le titre de la vidéo et un lien vers le moment exact.
 
+Et pareil sur Viki, Disney+ et Prime Video (primevideo.com, et les vidéos d'amazon.fr et d'amazon.com) : choisis les sous-titres coréens dans le lecteur, Dokhae fait le reste. La carte garde le titre de l'épisode.
+
 Tu peux aussi sélectionner du texte coréen sur n'importe quelle page, puis faire un clic droit et choisir « Analyser avec Dokhae », ou cliquer sur « Analyser la sélection » dans la fenêtre de l'extension.
 
 Chaque mot ajouté garde un lien vers la page où tu l'as trouvé : dans tes révisions, tu retrouves le chapitre d'un clic.
 
 Ce qui compte pour toi :
 • La lecture de l'image se fait sur ton ordinateur. Seul le texte reconnu part vers Dokhae pour l'analyse.
-• Dokhae ne lit que l'onglet où tu l'appelles, au moment où tu l'appelles. Seules exceptions, Netflix et YouTube : pendant la lecture, Dokhae lit le sous-titre affiché à l'écran (jamais la vidéo ni le fichier de sous-titres), et seulement s'il est en coréen. Un interrupteur par site le coupe.
+• Dokhae ne lit que l'onglet où tu l'appelles, au moment où tu l'appelles. Seules exceptions, les sites de vidéo (Netflix, YouTube, Viki, Disney+, Prime Video) : pendant la lecture, Dokhae lit le sous-titre affiché à l'écran (jamais la vidéo ni le fichier de sous-titres), et seulement s'il est en coréen. Un interrupteur par site le coupe.
 • Pas de publicité, aucune revente de données.
 • Tes mots peuvent aussi partir dans Anki (module AnkiConnect), si tu préfères.
 
-Abonnement requis : l'extension s'utilise avec un compte Dokhae abonné. Pour un nouveau compte, le premier mois est à 2,99 €. Formules et conditions sur https://dokhae.fr/pricing
+5 analyses gratuites par jour : connecte simplement ton compte Dokhae, même sans formule. Les sous-titres des vidéos ne les entament pas, seule l'ouverture d'un mot en compte une. Tes mots vont dans ton deck du Parcours. Avec une formule, tu analyses sans limite ; pour un nouveau compte, le premier mois est à 2,99 €. Formules et conditions sur https://dokhae.fr/pricing
 
 Connexion en un clic : « Connecter mon compte » ouvre dokhae.fr et relie l'extension à ton compte, sans copier de code.
 
@@ -47,7 +49,7 @@ Français
 
 ## Objectif unique (Single purpose)
 
-Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres Netflix et YouTube : l'extension lit le texte coréen d'une zone ou d'une sélection choisie par l'utilisateur, ou le sous-titre coréen affiché par le lecteur Netflix ou YouTube, l'explique mot à mot, et enregistre les mots choisis dans son deck de révision Dokhae.
+Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres de Netflix, YouTube, Viki, Disney+ et Prime Video : l'extension lit le texte coréen d'une zone ou d'une sélection choisie par l'utilisateur, ou le sous-titre coréen affiché par le lecteur de l'un de ces sites, l'explique mot à mot, et enregistre les mots choisis dans son deck de révision Dokhae.
 
 ## Justification des autorisations
 
@@ -55,7 +57,7 @@ Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres N
 |---|---|
 | `activeTab` | Quand l'utilisateur clique sur « Scanner une bulle » ou sur le menu contextuel, l'extension accède à l'onglet actif, et seulement à lui, pour afficher le cadre de sélection et capturer la zone visible choisie. |
 | `scripting` | Injecter le panneau Dokhae dans l'onglet actif à la demande (sous `activeTab`), au lieu de déclarer un script sur tous les sites. |
-| `storage` | Garder les réglages (jeton d'accès Dokhae, identifiant aléatoire de cette installation, deck choisi, option Anki), l'état de l'abonnement en cache, les mots en attente d'envoi et, sur cet appareil seulement, les analyses des phrases déjà lues (pour ne pas les redemander au serveur, effacées à la déconnexion). |
+| `storage` | Garder les réglages (jeton d'accès Dokhae, identifiant aléatoire de cette installation, deck choisi, option Anki), l'état de l'abonnement en cache (ou, sans formule, le nombre d'analyses gratuites restantes du jour), les mots en attente d'envoi et, sur cet appareil seulement, les analyses des phrases déjà lues (pour ne pas les redemander au serveur, effacées à la déconnexion). |
 | `offscreen` | Faire tourner la reconnaissance de texte (Tesseract, WebAssembly) dans un Web Worker et lire l'audio de prononciation. Un service worker ne peut faire ni l'un ni l'autre. |
 | `contextMenus` | L'entrée « Analyser avec Dokhae » du clic droit sur du texte sélectionné. |
 | `https://dokhae.fr/*` | L'API Dokhae : vérification du compte, analyse du texte reconnu, enregistrement des mots dans le deck. Le script de connexion en un clic tourne uniquement sur `https://dokhae.fr/connect-extension`. |
@@ -64,6 +66,10 @@ Aider à lire le coréen dans les webtoons, sur le web et dans les sous-titres N
 | `https://dict-dn.pstatic.net/*` | Télécharger ce fichier audio (serveur de fichiers du dictionnaire Naver). |
 | `https://www.netflix.com/*` (scripts de contenu) | Lire le sous-titre coréen affiché par le lecteur Netflix pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique avec le lecteur de Netflix. Le script tourne sur tout le domaine car Netflix change de page sans la recharger, mais il ne fait rien en dehors de `/watch/`. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
 | `https://www.youtube.com/*` (script de contenu) | Lire le sous-titre coréen affiché par le lecteur YouTube pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique. Le script tourne sur tout le domaine car YouTube change de page sans la recharger, mais il ne fait rien en dehors des pages de vidéo. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
+| `https://www.viki.com/*` (script de contenu) | Lire le sous-titre coréen affiché par le lecteur Viki pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique. Le script tourne sur tout le domaine car Viki change de page sans la recharger, mais il ne fait rien en dehors des pages de vidéo (`/videos/`). Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
+| `https://www.disneyplus.com/*` (scripts de contenu) | Lire le sous-titre coréen affiché par le lecteur Disney+ pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique avec le lecteur de Disney+. Le script tourne sur tout le domaine car Disney+ change de page sans la recharger, mais il ne fait rien en dehors du lecteur. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
+| `https://www.primevideo.com/*` (script de contenu) | Lire le sous-titre coréen affiché par le lecteur Prime Video pour le redessiner mot à mot et le rendre cliquable, mettre la vidéo en pause au clic sur un mot, et revenir à une réplique. Le script tourne sur tout le domaine car le lecteur de Prime Video s'ouvre par-dessus n'importe quelle page sans changer d'adresse ; il ne fait rien tant qu'aucun sous-titre n'est affiché. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
+| `https://www.amazon.fr/gp/video/*`, `https://www.amazon.com/gp/video/*` (script de contenu) | Le même script Prime Video, sur les pages vidéo d'Amazon uniquement (`/gp/video/`), où Prime Video se regarde aussi : le reste de la boutique Amazon n'est pas concerné. Ni la vidéo ni les fichiers de sous-titres ne sont téléchargés. |
 | `http://127.0.0.1:8765/*`, `http://localhost:8765/*` | AnkiConnect, sur l'ordinateur de l'utilisateur : utilisé uniquement si l'utilisateur choisit Anki comme destination de ses cartes. |
 
 Code distant : **non**. Tout le code est dans le paquet (le modèle de reconnaissance coréen compris).
@@ -73,7 +79,7 @@ Code distant : **non**. Tout le code est dans le paquet (le modèle de reconnai
 Données collectées (cases à cocher) :
 - **Informations permettant d'identifier personnellement l'utilisateur** : oui, l'adresse e-mail du compte Dokhae, reçue du site pour afficher le compte connecté.
 - **Informations d'authentification** : oui, le jeton d'accès Dokhae (`sori_…`), stocké localement et envoyé uniquement à dokhae.fr.
-- **Contenu du site Web** : oui, le texte coréen reconnu dans la zone choisie (ou le texte sélectionné, ou le sous-titre coréen affiché sur Netflix ou YouTube) est envoyé à dokhae.fr pour l'analyse. Les mots écoutés sont envoyés au dictionnaire Naver ou à Google pour la prononciation.
+- **Contenu du site Web** : oui, le texte coréen reconnu dans la zone choisie (ou le texte sélectionné, ou le sous-titre coréen affiché sur Netflix, YouTube, Viki, Disney+ ou Prime Video) est envoyé à dokhae.fr pour l'analyse. Les mots écoutés sont envoyés au dictionnaire Naver ou à Google pour la prononciation.
 - **Historique Web** : oui, par prudence : quand l'utilisateur ajoute un mot à son deck, l'adresse de la page où il l'a trouvé est enregistrée avec la carte, pour qu'il puisse y revenir. Rien n'est envoyé tant qu'il n'ajoute pas de mot.
 - Santé, finances, communications personnelles, localisation, activité de l'utilisateur : **non**.
 

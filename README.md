@@ -13,17 +13,20 @@ Korean webtoons, built for both from the same source. Drag a box over a speech b
 - **saves** the words you pick to your Dokhae deck on https://dokhae.fr (or,
   if you prefer, sends them to Anki).
 
-On Netflix and YouTube it also turns Korean subtitles into clickable,
-analysed lines (see [Netflix subtitles](#netflix-subtitles) and
-[YouTube subtitles](#youtube-subtitles)).
+On Netflix, YouTube, Viki, Disney+ and Prime Video it also turns Korean
+subtitles into clickable, analysed lines (see
+[Netflix subtitles](#netflix-subtitles),
+[YouTube subtitles](#youtube-subtitles) and
+[Viki, Disney+ and Prime Video subtitles](#viki-disney-and-prime-video-subtitles)).
 
 The interface is in French. It is the browser client of the
 [Dokhae website](../site), which also serves the mobile app.
 
-> **Requires a Dokhae subscription.** There is no free tier. The extension
-> checks its account token with `GET /api/me` and stays locked until the
-> account has an active plan (the first month is 2,99 €, see `/pricing` on the
-> site).
+> **Free to try, unlimited with a plan.** Any Dokhae account can connect the
+> extension: without a plan it gets 5 analyses a day (counted by the site, see
+> [Free analyses](#free-analyses)) and can save words, which go to its
+> Parcours deck. A plan removes the limit (the first month is 2,99 € for an
+> account that never paid, see `/pricing` on the site).
 
 ## Contents
 
@@ -31,15 +34,18 @@ The interface is in French. It is the browser client of the
 - [How to use](#how-to-use)
 - [Netflix subtitles](#netflix-subtitles)
 - [YouTube subtitles](#youtube-subtitles)
+- [Viki, Disney+ and Prime Video subtitles](#viki-disney-and-prime-video-subtitles)
+- [Requests to the site](#requests-to-the-site)
 - [How it works](#how-it-works)
 - [Build and install](#build-and-install)
-- [Publishing on the Chrome Web Store](#publishing-on-the-chrome-web-store)
+- [Publishing](#publishing)
 - [Anki (optional)](#anki-optional)
 - [Technology](#technology)
 
 ## Connect your account
 
-1. Create an account on https://dokhae.fr and subscribe.
+1. Create an account on https://dokhae.fr (a plan is optional, see
+   [Free analyses](#free-analyses)).
 2. Installing the extension opens `/connect-extension?welcome=1`; later, the
    **Connecter mon compte** button in the popup or the settings page opens
    `/connect-extension`. One click there connects this browser as a device of
@@ -64,6 +70,25 @@ network does not lock you out mid-chapter.
 If your account has several decks, pick the one captures go to in the settings.
 The list comes from the site (`GET /api/decks`), so decks are created and
 renamed there. Without a choice, words land in your first deck.
+
+### Free analyses
+
+An account without a plan gets 5 analyses a day, counted by the site (its
+`src/server/quota.ts`) and reset at midnight UTC:
+
+- `GET /api/me` returns `freeAnalysesLeft` and `freeAnalysesPerDay`; the
+  popup shows "X/5 analyses gratuites aujourd'hui" and the settings page the
+  same count.
+- A scan or a selection spends one. Once they are spent, `POST /api/analyze`
+  answers `free_limit_reached`, and the cached access becomes `free-limit`
+  (`src/access.ts`, wording in `src/freeLimit.ts`): scans are refused without
+  a request until the next UTC day, with the plans offered.
+- Video lines are sent with `kind: "line"` and cost nothing. Opening a word
+  under a video spends one (`POST /api/free/word`, `spendFreeWord` in
+  `src/site.ts`, called by `openWord` in `src/video/player.ts`); a word
+  opened again on the same line is not counted twice.
+- Saving words stays open to free accounts, even once the day's analyses are
+  spent (`deckLock`): their words go to their Parcours deck.
 
 ## How to use
 
@@ -105,14 +130,16 @@ alone.
   `P` pause at the end of each line.
 - **Settings**: "Sous-titres Netflix interactifs" (on by default) and
   "Pause à la fin de chaque réplique" (off by default), in the settings page.
-- **Locked account**: the line shows as is, with the usual message and
+- **Locked account** (not connected, or a free account whose analyses are
+  spent): the line shows as is, with the usual message and
   **Connecter mon compte** or **Voir les formules**.
 
 How it is built:
 
-- The player itself is shared with YouTube: `src/video/player.ts` (overlay,
-  analysis, panel, keys, auto-pause) drives a `SubtitleSite` adapter
-  (`src/video/site.ts`); Netflix's is `src/netflix/site.ts`.
+- The player itself is shared with the other video sites:
+  `src/video/player.ts` (overlay, analysis, panel, keys, auto-pause) drives a
+  `SubtitleSite` adapter (`src/video/site.ts`); Netflix's is
+  `src/netflix/site.ts`.
 - `entrypoints/netflix.content.ts` is declared for all of
   `https://www.netflix.com/*`, because Netflix is a single-page app (going
   from the catalogue to a title loads no new page), and idles outside
@@ -170,6 +197,57 @@ What differs from Netflix:
   Playwright run sees the player but no subtitles. Test by hand, or inject a
   caption window in YouTube's markup into the real player.
 
+## Viki, Disney+ and Prime Video subtitles
+
+On `https://www.viki.com/videos/…`, on Disney+ (`https://www.disneyplus.com`,
+`/play/…` or `/video/…`) and on Prime Video (`https://www.primevideo.com`, and
+only the `/gp/video/*` pages of `www.amazon.fr` and `www.amazon.com`, never
+the shop), with Korean subtitles chosen in the player, Dokhae does what it
+does on Netflix: same overlay, same panel, same keys. Each site has its pair
+of settings, in a "Viki, Disney+, Prime Video" section of the settings page:
+`vikiSubtitles`/`vikiAutoPause`, `disneySubtitles`/`disneyAutoPause`,
+`primeSubtitles`/`primeAutoPause` (interactive subtitles on by default,
+auto-pause off). Cards get the source `Viki · <title>`, `Disney+ · <title>`
+or `Prime Video · <title>`.
+
+What differs:
+
+- Each site is one adapter, and every selector lives in it:
+  `src/viki/site.ts` (video.js: `.vjs-text-track-display`,
+  `.vjs-text-track-cue`), `src/disney/site.ts` (`.TimedTextOverlay`,
+  `.hive-subtitle-renderer-*`, the older `.dss-subtitle-renderer-*`,
+  `timed-text-override-region`, `.shaka-text-container`) and
+  `src/prime/site.ts` (`.atvwebplayersdk-captions-overlay`,
+  `.atvwebplayersdk-captions-text`). The content scripts
+  (`entrypoints/viki.content.ts`, `disney.content.ts`, `prime.content.ts`)
+  only start the shared player with them.
+- **Disney+** draws its subtitles inside its web components' shadow roots in
+  some versions: the root is also searched in open shadow roots
+  (`queryDeep(…, true)` in `src/video/dom.ts`), and since mutations inside a
+  shadow root never reach the page's observer, the site is also polled
+  (`pollMs: 300`). Its player keeps its own playhead, so seeking goes, like
+  Netflix, through a few lines in the page's `MAIN` world:
+  `entrypoints/disney-seek.content.ts` (`disney-seek.js`) calls the
+  `disney-web-player` element's `mediaPlayer.seek` (in milliseconds), and
+  falls back to `currentTime` if that API is gone. The subtitle script sends
+  it the target time in a DOM event (`src/disney/bridge.ts`).
+- **Prime Video** opens its player over whatever page started it, the home
+  page included, without changing the address. So the script runs on every
+  matched page: the watch id is the title's id when the address names one
+  (`/detail/<id>`, `/dp/<id>`), and `"prime"` otherwise, in which case the
+  card links to the site's home. On Amazon only `/gp/video/*` is matched.
+  Seeking sets the `<video>`'s `currentTime`, which the player follows.
+- **Viki** (video.js) also follows `currentTime`. Neither Viki nor Disney+
+  nor Prime Video has a time parameter in its links: the card links to the
+  episode or title, not to the moment.
+- Tests: `src/__tests__/moreVideoSites.test.ts`.
+- Testing note: these three adapters were verified only on frozen DOM in the
+  unit tests, with the selectors cross-checked against the video wrappers of
+  Firefox's picture-in-picture, which reads the same layers on these sites.
+  They have not been tried on the live sites (no accounts). The first real
+  session on each should check that the line is found, that `A`/`R` seek,
+  and on Disney+ that `mediaPlayer.seek` still exists.
+
 ## Requests to the site
 
 Every analysis goes through `src/analyzer.ts` in the background:
@@ -180,7 +258,7 @@ Every analysis goes through `src/analyzer.ts` in the background:
   server may correct their OCR text. Signing out clears it;
 - two requests for the same line at once share one call;
 - after a 429 the background backs off (2 minutes, doubling up to an hour,
-  or the site's `Retry-After`): automatic requests (Netflix and YouTube lines) wait
+  or the site's `Retry-After`): automatic requests (video lines) wait
   without touching the network, a reader's click still goes through.
 
 `GET /api/me` is shared by concurrent checks and not forced by the popup
@@ -242,8 +320,10 @@ browsers (`build:chrome` and `build:firefox` build one).
   does the same with live reload.
 
 Firefox treats every host as optional, content scripts' included. The
-first-run page asks for the required hosts, `www.netflix.com` and
-`www.youtube.com` in one prompt; if the video sites alone are missing, the
+first-run page asks for the required hosts and the video sites
+(`www.netflix.com`, `www.youtube.com`, `www.viki.com`, `www.disneyplus.com`,
+`www.primevideo.com`, and the `/gp/video/` pages of `www.amazon.fr` and
+`www.amazon.com`) in one prompt; if the video sites alone are missing, the
 popup and the settings offer a button to allow them (`src/permissions.ts`),
 and the rest keeps working.
 
@@ -310,7 +390,7 @@ lacks them, drop `_NanumGothic-Regular.ttf`, `_NanumMyeongjo-Regular.ttf` and
 | Account | Dokhae API, `GET /api/me`; token from `/connect-extension` |
 | Flashcards | Dokhae deck (`POST /api/cards`, default) or AnkiConnect |
 | Pronunciation | Naver dictionary audio, then Google TTS |
-| Permissions | `activeTab`, `scripting`, `storage`, `offscreen`, `contextMenus`; hosts: the site, Naver dictionary audio, Google TTS, AnkiConnect on localhost; content scripts: the site's connect page, `https://www.netflix.com/*` and `https://www.youtube.com/*` |
+| Permissions | `activeTab`, `scripting`, `storage`, `offscreen`, `contextMenus`; hosts: the site, Naver dictionary audio, Google TTS, AnkiConnect on localhost; content scripts: the site's connect page, `https://www.netflix.com/*`, `https://www.youtube.com/*`, `https://www.viki.com/*`, `https://www.disneyplus.com/*`, `https://www.primevideo.com/*`, `https://www.amazon.fr/gp/video/*` and `https://www.amazon.com/gp/video/*` |
 
 The Clova Voice (Naver Cloud) code path is still in the source, but its
 settings are hidden (`SHOW_NAVER_CLOUD = false` in
