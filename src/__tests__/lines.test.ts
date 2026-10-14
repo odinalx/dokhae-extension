@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LineAnalyzer, type Outcome, type Send } from '../netflix/lines';
+import { LineAnalyzer, type Outcome, type Send } from '../video/lines';
 import type { AnalysisResult } from '../types';
 
 const result = (text: string): AnalysisResult => ({ text, sentenceTranslation: '', tone: '', words: [] });

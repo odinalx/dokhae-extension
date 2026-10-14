@@ -3,7 +3,7 @@ import type { AnalyzeMode } from '../analyzer';
 import type { AnalysisResult } from '../types';
 
 /*
- * When the Netflix script asks for a line's analysis, and when it does not.
+ * When the subtitle scripts (Netflix, YouTube) ask for a line's analysis, and when it does not.
  *
  * Every distinct line used to cost a request the moment it appeared,
  * including the ones flashing past while the viewer scrubs or skips an
@@ -98,8 +98,9 @@ export class LineAnalyzer {
   /**
    * A line appeared. `onUpdate` runs when what is known about it changes
    * (an analysis arrived, or a refusal), if it is still the line on screen.
+   * `dwellMs` overrides the wait for this line (a line still being written).
    */
-  show(text: string, onUpdate: () => void): void {
+  show(text: string, onUpdate: () => void, dwellMs?: number): void {
     this.leave();
     this.current = text;
     if (this.memory.has(text) || this.locked) return;
@@ -108,7 +109,7 @@ export class LineAnalyzer {
       if (this.current === text && (outcome.ok || outcome.code !== 'cache_miss')) onUpdate();
     };
     void this.request(text, 'cache').then(settle);
-    const dwell = this.opts.dwellMs ?? DWELL_MS;
+    const dwell = dwellMs ?? this.opts.dwellMs ?? DWELL_MS;
     this.dwellTimer = this.timers.set(() => {
       this.dwellTimer = 0;
       if (this.current !== text || this.memory.has(text)) return;

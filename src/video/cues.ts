@@ -1,8 +1,8 @@
 /*
  * The subtitle lines seen so far in this video, with the moment each one
  * started (the <video>'s currentTime when it appeared). That is what
- * "réplique précédente" and "rejouer" jump to: Netflix's own timings are in
- * the subtitle file, which Dokhae never downloads.
+ * "réplique précédente" and "rejouer" jump to: the player's own timings are
+ * in the subtitle file, which Dokhae never downloads.
  */
 
 export interface Cue {
@@ -62,6 +62,14 @@ export class CueHistory {
       }
     }
     return cue;
+  }
+
+  /**
+   * The line on screen grew without ending (YouTube's automatic captions
+   * write a line word by word): same cue, same start, longer text.
+   */
+  extend(cue: Cue, text: string): void {
+    if (this.cues.includes(cue)) cue.text = text;
   }
 
   /** The latest cue that started at or before `time` (a small margin for rounding). */
